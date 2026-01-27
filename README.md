@@ -1,4 +1,5 @@
-# ai-powered-financial-insights
+# AI Powered Financial Insights
+
 This project is a Python-based financial dashboard that uses Excel spreadsheets as the primary data source to generate interactive charts, financial indicators, and AI-driven textual insights. The goal is to provide an intuitive and intelligent way to monitor, analyze, and interpret financial data.
 
 # Instructions
@@ -14,8 +15,10 @@ Required
 
 Check in the terminal:
 
+<pre>
 docker --version
 docker compose version
+</pre>
 
 If not installed:
 
@@ -26,8 +29,10 @@ Linux: use your distribution’s package manager
 
 In the terminal:
 
+<pre>
 git clone <repository_url>
 cd <local_repository>
+</pre>
 
 Expected structure (example):
 
@@ -50,7 +55,9 @@ The CSV files must exist (even if empty), because the app reads them at startup.
 
 From the project root:
 
+<pre>
 docker compose up -d --build
+</pre>
 
 This will:
 
@@ -60,12 +67,16 @@ This will:
 
 Check if everything is running:
 
+<pre>
 docker ps
+</pre>
 
 You should see something like:
 
+<pre>
 financial-dashboard  
 ollama
+</pre>
 
 4) Downloading the AI model (required)
 
@@ -73,7 +84,9 @@ Ollama does not come with models by default.
 
 Run once:
 
+<pre>
 docker exec -it ollama ollama pull llama3.1
+</pre>
 
 (Alternative models also work, e.g. mistral, phi3, etc.)
 
@@ -113,11 +126,15 @@ This ensures that:
 
 To stop everything:
 
+<pre>
 docker compose down
+</pre>
 
 To stop without deleting Ollama data:
 
+<pre>
 docker compose down
+</pre>
 
 (The model volume is preserved automatically)
 
@@ -129,24 +146,31 @@ docker compose down
 - Wait a few seconds and change any filter
 - Or restart only the dashboard:
 
+<pre>
 docker restart financial-dashboard
+</pre>
 
 ❌ “Cannot connect to Ollama”
 
 Check:
 
+<pre>
 docker ps
+</pre>
 
 If the ollama container is not running:
 
+<pre>
 docker compose up -d ollama
+</pre>
 
 ❌ Port 8050 is already in use
 
 Edit docker-compose.yml:
 
 ports:
-  - "8080:8050"
+
+"8080:8050"
 
 Then access:
 
@@ -159,5 +183,3 @@ http://localhost:8080
 - They communicate via the Docker network (http://ollama:11434)
 - No external dependencies
 - 100% offline AI
-=======
->>>>>>> a2368e9 (Initial commit)
