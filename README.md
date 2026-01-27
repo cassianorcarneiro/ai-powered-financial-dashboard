@@ -33,13 +33,21 @@ Expected structure (example):
 
 .
 ├── app.py
+
 ├── config.py
+
 ├── requirements.txt
+
 ├── docker-compose.yml
+
 ├── Dockerfile
+
 ├── data/
+
 │   ├── transactions.csv
+
 │   ├── categories.csv
+
 │   └── payment_methods.csv
 
 The CSV files must exist (even if empty), because the app reads them at startup.
@@ -96,8 +104,11 @@ The CSV files are stored outside the container, in the data/ folder.
 Example:
 
 data/
+
 ├── transactions.csv
+
 ├── categories.csv
+
 └── payment_methods.csv
 
 This ensures that:
