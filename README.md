@@ -40,6 +40,7 @@ Expected structure (example):
 .
 ├── app.py
 ├── config.py
+├── loading.html
 ├── requirements.txt
 ├── docker-compose.yml
 ├── Dockerfile

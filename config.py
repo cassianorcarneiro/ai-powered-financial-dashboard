@@ -8,10 +8,12 @@ class Config:
 
     ollama_timeout = 120
     ollama_model = "llama3.2:3b"
- 
-    payment_methods_db = "payments_methods.csv"
-    csv_db = "data.csv"
-    categories_db = "categories.csv"
+    
+    timezone = "America/Sao_Paulo"
+
+    payment_methods_db = "data/payments_methods.csv"
+    csv_db = "data/data.csv"
+    categories_db = "data/categories.csv"
 
     gray_1 = "#bbbbbb"
     gray_2 = "#65737e"

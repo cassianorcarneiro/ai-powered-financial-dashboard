@@ -22,6 +22,7 @@ import matplotlib.colors as mcolors
 import plotly.graph_objects as go
 import json
 import requests
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # Custom modules import
 
@@ -213,6 +214,18 @@ def get_ai_comment(metrics: dict, model: str = "llama3.2:3b") -> tuple[str, str]
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # General custom functions
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+def get_datetime(timezone_str):
+    try:
+        # Set the timezone based on the string
+        timezone = ZoneInfo(timezone_str)
+        
+        # Get the current timezone-aware datetime
+        current_datetime = datetime.now(timezone)
+        return current_datetime
+    
+    except ZoneInfoNotFoundError:
+        return f"Error: The timezone '{timezone_str}' does not exist."
 
 def load_categories():
     df_categories = pd.read_csv(CATEGORIES_PATH, sep=";", encoding="utf-8-sig")
@@ -413,43 +426,39 @@ app.layout = html.Div([
                     dbc.Card(
                         dbc.CardBody([
                             dbc.Row([
+
                                 dbc.Col([
                                     dbc.Label("Start Payment Date"),
-                                    html.Div(
-                                        dcc.DatePickerSingle(
-                                            id="date-start",
-                                            date=default_start_date,
-                                            display_format="YYYY-MM-DD",
-                                            className="date-picker-wide"
-                                        ),
+                                    dbc.Input(
+                                        id="date-start",
+                                        type="date",
+                                        value=default_start_date,
                                         style={"width": "100%"}
-                                    )
-                                ], width=3, className="d-flex flex-column justify-content-center"),
+                                    ),
+                                ], width=3, className="d-flex flex-column align-items-center justify-content-center"),
 
                                 dbc.Col([
                                     dbc.Label("End Payment Date"),
-                                    html.Div(
-                                        dcc.DatePickerSingle(
-                                            id="date-end",
-                                            date=default_end_date,
-                                            display_format="YYYY-MM-DD",
-                                            className="date-picker-wide"
-                                        ),
+                                    dbc.Input(
+                                        id="date-end",
+                                        type="date",
+                                        value=default_end_date,
                                         style={"width": "100%"}
-                                    )
-                                ], width=3, className="d-flex flex-column justify-content-center")
+                                    ),
+                                ], width=3, className="d-flex flex-column align-items-center justify-content-center")
+
                             ])
                         ], style={
                             "backgroundColor": config.blue_2,
                             "borderColor": config.blue_2,
                             "color": config.blue_1,
-                            "fontSize": config.fontsize_1
-                        }), style={
+                            "fontSize": config.fontsize_3
+                            }), style={
                                 "backgroundColor": config.blue_2,
                                 "borderColor": config.blue_2,
                                 "color": config.blue_1,
                                 "fontSize": config.fontsize_1
-                            }
+                                }
                     ),
                     id="filters-collapse",
                     is_open=False,
@@ -480,7 +489,7 @@ app.layout = html.Div([
                                       "borderColor": config.blue_2,
                                       "color": config.blue_1,
                                       "fontSize": config.fontsize_1}), width="auto"),
-            dbc.Col(dbc.Button("Generate AI comment", id="update-ai-comment-btn",
+            dbc.Col(dbc.Button("Generate AI Insight", id="update-ai-comment-btn",
                                className="me-2", style={"backgroundColor": config.blue_2,
                                                         "borderColor": config.blue_2,
                                                         "color": config.blue_1,
@@ -630,8 +639,8 @@ def toggle_filters(n_clicks):
 # Callback to reset filters
 
 @app.callback(
-    Output("date-start", "date"),
-    Output("date-end", "date"),
+    Output("date-start", "value"),
+    Output("date-end", "value"),
     Input("reset-btn", "n_clicks"),
     prevent_initial_call=True
 )
@@ -692,7 +701,7 @@ def toggle_modal(open_click, close_click, is_open):
      Input("btn-delete-hash-selected", "n_clicks"),
      Input("btn-delete-selected", "n_clicks"),
      Input("update-trigger", "data"),
-     Input("date-start", "date"), Input("date-end", "date")],
+     Input("date-start", "value"), Input("date-end", "value")],
     [State("input-label", "value"), State("input-category", "value"),
      State("input-date", "value"), State("input-amount", "value"),
      State("input-installments", "value"), State("input-payment-method", "value"),
@@ -1011,8 +1020,8 @@ def update_all(save_click, delete_click_hash, delete_click, update_trigger, star
     Output("ai-comment", "children"),
     Output("ai-status", "children"),
     Input("update-ai-comment-btn", "n_clicks"),     # single trigger after opening
-    State("date-start", "date"),                   # it doesn't fire
-    State("date-end", "date"),                     # it doesn't fire
+    State("date-start", "value"),                   # it doesn't fire
+    State("date-end", "value"),                     # it doesn't fire
     prevent_initial_call=False                      # executes when opened
 )
 
@@ -1031,6 +1040,8 @@ def update_ai_comment(update_trigger, start_date, end_date):
     metrics = compute_last12m_metrics(df, end_date=end_date)
     status, text = get_ai_comment(metrics, model=config.ollama_model)
     
+    text += f'\n\nLast update: {get_datetime(config.timezone).strftime('%Y-%m-%d %H:%M:%S')}'
+
     return text, f"Status: {status}"
 
 if __name__ == "__main__":
