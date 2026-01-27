@@ -31,24 +31,18 @@ cd <local_repository>
 
 Expected structure (example):
 
+<pre>
 .
 ├── app.py
-
 ├── config.py
-
 ├── requirements.txt
-
 ├── docker-compose.yml
-
 ├── Dockerfile
-
 ├── data/
-
 │   ├── transactions.csv
-
 │   ├── categories.csv
-
 │   └── payment_methods.csv
+</pre>
 
 The CSV files must exist (even if empty), because the app reads them at startup.
 
@@ -103,13 +97,12 @@ The CSV files are stored outside the container, in the data/ folder.
 
 Example:
 
+<pre>
 data/
-
 ├── transactions.csv
-
 ├── categories.csv
-
 └── payment_methods.csv
+</pre>
 
 This ensures that:
 
