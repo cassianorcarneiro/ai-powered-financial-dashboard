@@ -52,7 +52,13 @@ Expected structure (example):
 
 The CSV files must exist (even if empty), because the app reads them at startup.
 
-3) Starting the containers
+3) Install requirements
+
+```bash
+pip install -r requirements.txt
+```
+
+4) Starting the containers
 
 From the project root:
 
@@ -79,7 +85,7 @@ financial-dashboard
 ollama
 </pre>
 
-4) Downloading the AI model (required)
+5) Downloading the AI model (required)
 
 Ollama does not come with models by default.
 
@@ -91,7 +97,7 @@ docker exec -it ollama ollama pull llama3.1
 
 (Alternative models also work, e.g. mistral, phi3, etc.)
 
-5) Accessing the Dashboard
+6) Accessing the Dashboard
 
 Open your browser:
 
@@ -105,7 +111,7 @@ You will see:
 
 On the first run, the commentary may take a few seconds (initial model loading).
 
-6) Where is the data stored?
+7) Where is the data stored?
 
 The CSV files are stored outside the container, in the data/ folder.
 
@@ -123,7 +129,7 @@ This ensures that:
 - Your data is not lost when restarting containers
 - You can manually edit the CSV files if you want
 
-7) Stopping the system
+8) Stopping the system
 
 To stop everything:
 
@@ -139,7 +145,7 @@ docker compose down
 
 (The model volume is preserved automatically)
 
-8) Common issues
+9) Common issues
 
 ❌ Commentary shows “ReadTimeout”
 
@@ -177,7 +183,7 @@ Then access:
 
 http://localhost:8080
 
-9) Mental model of how it works
+10) Mental model of how it works
 
 - Dash runs in financial-dashboard
 - Ollama runs in ollama
