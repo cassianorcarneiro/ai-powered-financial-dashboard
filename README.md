@@ -1,4 +1,4 @@
-# AI Powered Financial Dashboard
+# 💰 AI Powered Financial Dashboard
 
 A Python-based personal finance dashboard that turns CSV-stored transactions into interactive charts, financial indicators, and AI-driven written insights — all running locally via Docker, with **no data sent to the cloud**.
 
@@ -10,7 +10,7 @@ A Python-based personal finance dashboard that turns CSV-stored transactions int
 
 ---
 
-## Features
+## ✨ Features
 
 - 📊 **Interactive charts** — spending by category, payment method, monthly trends, installments starting/finishing
 - 🤖 **AI insights** — a local LLM (via [Ollama](https://ollama.com)) reads aggregated metrics and produces a short financial commentary
@@ -21,7 +21,7 @@ A Python-based personal finance dashboard that turns CSV-stored transactions int
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ```
 ┌─────────────────────────┐         ┌──────────────────┐
@@ -40,7 +40,7 @@ Two containers, one Docker network. The dashboard talks to Ollama at `http://oll
 
 ---
 
-## Prerequisites
+## 📋 Prerequisites
 
 - **Docker Desktop** (Windows/macOS) or **Docker Engine + Compose plugin** (Linux)
   - Verify: `docker --version` and `docker compose version`
@@ -52,7 +52,7 @@ Two containers, one Docker network. The dashboard talks to Ollama at `http://oll
 
 ---
 
-## Quick start
+## 🚀 Quick start
 
 ### 1. Clone the repository
 
@@ -127,7 +127,7 @@ The "Generate AI Insight" button at the top runs an analysis of the last 12 mont
 
 ---
 
-## Configuration
+## ⚙️ Configuration
 
 All runtime configuration is done through environment variables, exposed via `.env`:
 
@@ -156,7 +156,7 @@ The `model-puller` service will fetch the new model automatically.
 
 ---
 
-## Data persistence
+## 💾 Data persistence
 
 | What | Where | Persisted? |
 |------|-------|------------|
@@ -180,7 +180,7 @@ docker compose down
 
 ---
 
-## Common operations
+## 🛠️ Common operations
 
 ### View logs
 
@@ -209,7 +209,7 @@ docker exec -it ollama ollama list
 
 ---
 
-## Troubleshooting
+## 🧯 Troubleshooting
 
 **🔴 "ReadTimeout" or "Cannot connect to Ollama"**
 
@@ -254,7 +254,7 @@ The file is read on each callback, but the date filter may be excluding new rows
 
 ---
 
-## Project structure
+## 📁 Project structure
 
 ```
 .
@@ -274,7 +274,7 @@ The file is read on each callback, but the date filter may be excluding new rows
 
 ---
 
-## Privacy
+## 🔐 Privacy
 
 This project is designed to keep your financial data on your machine:
 
@@ -287,7 +287,7 @@ After the initial setup, you can disconnect from the internet and the dashboard 
 
 ---
 
-## Roadmap
+## 🛣️ Roadmap
 
 - [ ] Excel import (in addition to CSV)
 - [ ] Budget vs. actual tracking per category
@@ -301,5 +301,4 @@ After the initial setup, you can disconnect from the internet and the dashboard 
 The codebase architecture, organizational structure, and stylistic formatting of this repository were refactored and optimized leveraging [Claude](https://www.anthropic.com/claude) by Anthropic. All core business logic and intellectual property remain the work of the repository authors and are governed by the project's license.
 
 ---
-
 > *Built for people who want financial insights without trusting their bank statements to a third-party API.*
