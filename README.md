@@ -1,192 +1,311 @@
-# AI Powered Financial Insights
+# 💰 AI Powered Financial Dashboard
 
-This project is a Python-based financial dashboard that uses Excel spreadsheets as the primary data source to generate interactive charts, financial indicators, and AI-driven textual insights. The goal is to provide an intuitive and intelligent way to monitor, analyze, and interpret financial data.
+A Python-based personal finance dashboard that turns CSV-stored transactions into interactive charts, financial indicators, and AI-driven written insights — all running locally via Docker, with **no data sent to the cloud**.
 
-# Instructions
+<p align="center">
+  <img alt="Stack" src="https://img.shields.io/badge/Stack-Dash%20%2B%20Plotly%20%2B%20Ollama-blue?style=for-the-badge">
+  <img alt="License" src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-ready-2496ED?style=for-the-badge&logo=docker&logoColor=white">
+</p>
 
-1) Prerequisites
+---
 
-Before anything else, the user must have the following installed:
+## ✨ Features
 
-Required
+- 📊 **Interactive charts** — spending by category, payment method, monthly trends, installments starting/finishing
+- 🤖 **AI insights** — a local LLM (via [Ollama](https://ollama.com)) reads aggregated metrics and produces a short financial commentary
+- 💳 **Payment method management** — handle credit cards (with statement close / payment days) and debit accounts
+- 📅 **Installment-aware** — splits multi-installment purchases into per-month records with automatic payment date computation
+- 🔒 **Privacy-first** — all data stays on your machine; the LLM runs locally inside Docker
+- 💾 **Persistent data** — your CSVs live on the host filesystem, untouched by container restarts
 
-- Docker
-- Docker Compose (already included in Docker Desktop)
+---
 
-Check in the terminal:
+## 🏗️ Architecture
 
-<pre>
-docker --version
-docker compose version
-</pre>
+```
+┌─────────────────────────┐         ┌──────────────────┐
+│   financial-dashboard   │  HTTP   │      ollama      │
+│   (Dash + Plotly)       │ ──────▶ │   (local LLM)    │
+│   port 8050             │         │   port 11434     │
+└────────────┬────────────┘         └──────────────────┘
+             │
+             ▼
+       ┌───────────┐
+       │  ./data/  │   ← CSVs persisted on the host
+       └───────────┘
+```
 
-If not installed:
+Two containers, one Docker network. The dashboard talks to Ollama at `http://ollama:11434`. Your data lives in `./data/` and is mounted into the dashboard container.
 
-Windows / macOS: https://www.docker.com/products/docker-desktop  
-Linux: use your distribution’s package manager
+---
 
-2) Cloning the project
+## 📋 Prerequisites
 
-In the terminal:
+- **Docker Desktop** (Windows/macOS) or **Docker Engine + Compose plugin** (Linux)
+  - Verify: `docker --version` and `docker compose version`
+- **~8 GB free disk** (for the LLM model and images)
+- **~6 GB free RAM** (for `llama3.2:3b`; more for larger models)
+- **Internet** for the first run (pulling the Docker image and the LLM model)
 
-<pre>
-git clone <repository_url>
-cd <local_repository>
-</pre>
+> Don't have Docker? Get it at [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop).
 
-Expected structure (example):
+---
 
-<pre>
+## 🚀 Quick start
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/cassianorcarneiro/<repo-name>.git
+cd <repo-name>
+```
+
+### 2. Prepare your data folder
+
+```
 .
 ├── app.py
 ├── config.py
 ├── loading.html
 ├── requirements.txt
-├── docker-compose.yml
+├── docker-compose.yaml
 ├── Dockerfile
-├── data/
-│   ├── transactions.csv
-│   ├── categories.csv
-│   └── payment_methods.csv
-</pre>
-
-The CSV files must exist (even if empty), because the app reads them at startup.
-
-3) Install requirements
-
-```bash
-pip install -r requirements.txt
+├── .dockerignore
+├── .env.example
+└── data/
+    ├── data.csv
+    ├── categories.csv
+    └── payment_methods.csv
 ```
 
-4) Starting the containers
+The three CSV files inside `data/` **must exist**, even if empty. The app reads them at startup. Minimal headers expected:
 
-From the project root:
+| File | Required columns |
+|------|------------------|
+| `data.csv` | `Transaction Date;Payment Date;Label;Category;Amount;Installment;Payment Method;Hash;Record Timestamp;Ignore Entry` |
+| `categories.csv` | `Name` |
+| `payment_methods.csv` | `Name;Close Date;Payment Date;Type` |
 
-<pre>
+> Use `;` as separator and UTF-8-with-BOM encoding (Excel-friendly).
+
+### 3. (Optional) Configure environment
+
+```bash
+cp .env.example .env
+# edit .env to change the model, port, or timezone
+```
+
+Defaults: model `llama3.2:3b`, port `8050`, timezone `America/Sao_Paulo`.
+
+### 4. Build and start
+
+```bash
 docker compose up -d --build
-</pre>
+```
 
 This will:
 
-- Build the dashboard container
-- Pull the Ollama image
-- Create an internal network between them
+1. Build the dashboard image
+2. Pull the Ollama image
+3. Start both containers in a private network
+4. **Auto-pull the configured LLM** via the `model-puller` helper service (one-shot, runs once and exits)
 
-Check if everything is running:
+The first run takes a few minutes — most of it is downloading the model (~2 GB for the default).
 
-<pre>
-docker ps
-</pre>
+Verify everything is up:
 
-You should see something like:
+```bash
+docker compose ps
+```
 
-<pre>
-financial-dashboard  
-ollama
-</pre>
+### 5. Open the dashboard
 
-5) Downloading the AI model (required)
+Visit **http://localhost:8050** in your browser.
 
-Ollama does not come with models by default.
+The "Generate AI Insight" button at the top runs an analysis of the last 12 months. The first call may take 10–30 seconds while the model warms up; subsequent calls are faster.
 
-Run once:
+---
 
-<pre>
-docker exec -it ollama ollama pull llama3.1
-</pre>
+## ⚙️ Configuration
 
-(Alternative models also work, e.g. mistral, phi3, etc.)
+All runtime configuration is done through environment variables, exposed via `.env`:
 
-6) Accessing the Dashboard
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `DASHBOARD_PORT` | `8050` | Host port mapped to the dashboard |
+| `OLLAMA_MODEL` | `llama3.2:3b` | Which LLM to use for insights |
+| `TZ` | `America/Sao_Paulo` | Timezone for the "last update" timestamp |
 
-Open your browser:
+### Choosing a model
 
-http://localhost:8050
+| Model | Size | RAM needed | Quality | Best for |
+|-------|------|-----------|---------|----------|
+| `llama3.2:3b` ⭐ | ~2 GB | 4–6 GB | Good | Default, modest hardware |
+| `llama3.1:8b` | ~4.7 GB | 8 GB | Better | More nuanced commentary, has the headroom |
+| `mistral:7b` | ~4.1 GB | 8 GB | Strong reasoning | If you prefer Mistral's style |
+| `phi3:mini` | ~2.3 GB | 4 GB | Decent | English-leaning, very fast |
 
-You will see:
+Switch models by editing `OLLAMA_MODEL` in `.env`, then restart:
 
-- Financial charts
-- Transaction tables
-- A panel at the top with the AI commentary (based on the last 12 months)
+```bash
+docker compose up -d
+```
 
-On the first run, the commentary may take a few seconds (initial model loading).
+The `model-puller` service will fetch the new model automatically.
 
-7) Where is the data stored?
+---
 
-The CSV files are stored outside the container, in the data/ folder.
+## 💾 Data persistence
 
-Example:
+| What | Where | Persisted? |
+|------|-------|------------|
+| Your CSVs | `./data/` (bind mount) | ✅ on the host filesystem |
+| Ollama models | `ollama` named volume | ✅ across restarts |
+| Container filesystem | inside the container | ❌ rebuilt each time |
 
-<pre>
-data/
-├── transactions.csv
-├── categories.csv
-└── payment_methods.csv
-</pre>
+Edit your CSVs directly with any tool (Excel, VS Code, `pandas`) — the dashboard re-reads them on every interaction.
 
-This ensures that:
+To **completely reset** (including downloaded models):
 
-- Your data is not lost when restarting containers
-- You can manually edit the CSV files if you want
+```bash
+docker compose down -v
+```
 
-8) Stopping the system
+To stop **without** losing data or models:
 
-To stop everything:
-
-<pre>
+```bash
 docker compose down
-</pre>
+```
 
-To stop without deleting Ollama data:
+---
 
-<pre>
-docker compose down
-</pre>
+## 🛠️ Common operations
 
-(The model volume is preserved automatically)
+### View logs
 
-9) Common issues
+```bash
+docker compose logs -f dashboard
+docker compose logs -f ollama
+```
 
-❌ Commentary shows “ReadTimeout”
+### Restart only the dashboard (after editing the code)
 
-- The model is still loading
-- Wait a few seconds and change any filter
-- Or restart only the dashboard:
+```bash
+docker compose up -d --build dashboard
+```
 
-<pre>
-docker restart financial-dashboard
-</pre>
+### Manually pull a different model
 
-❌ “Cannot connect to Ollama”
+```bash
+docker exec -it ollama ollama pull mistral:7b
+```
 
-Check:
+### List available models
 
-<pre>
-docker ps
-</pre>
+```bash
+docker exec -it ollama ollama list
+```
 
-If the ollama container is not running:
+---
 
-<pre>
-docker compose up -d ollama
-</pre>
+## 🧯 Troubleshooting
 
-❌ Port 8050 is already in use
+**🔴 "ReadTimeout" or "Cannot connect to Ollama"**
 
-Edit docker-compose.yml:
+The model is still loading on the first call. Wait 30 seconds and click "Generate AI Insight" again. If it persists:
 
-ports:
+```bash
+docker compose logs ollama       # check Ollama is healthy
+docker compose restart dashboard # warm restart of the dashboard
+```
 
-"8080:8050"
+**🔴 Port 8050 is already in use**
 
-Then access:
+Set a different port in `.env`:
 
-http://localhost:8080
+```bash
+DASHBOARD_PORT=8080
+```
 
-10) Mental model of how it works
+Then `docker compose up -d` and visit http://localhost:8080.
 
-- Dash runs in financial-dashboard
-- Ollama runs in ollama
-- They communicate via the Docker network (http://ollama:11434)
-- No external dependencies
-- 100% offline AI
+**🔴 Empty charts / "No data available"**
+
+Make sure your `data/data.csv` has rows within the date filter range. The default filter is the current calendar year — adjust the date inputs at the top of the page.
+
+**🔴 AI insight always shows the offline fallback**
+
+Check that the model was pulled:
+
+```bash
+docker exec -it ollama ollama list
+```
+
+If the model isn't listed, pull it manually:
+
+```bash
+docker exec -it ollama ollama pull llama3.2:3b
+```
+
+**🔴 CSV changes don't appear in the dashboard**
+
+The file is read on each callback, but the date filter may be excluding new rows. Reset filters with the ↺ button.
+
+---
+
+## 📁 Project structure
+
+```
+.
+├── app.py                  # Dash app, callbacks, layout
+├── config.py               # Colors, fonts, db paths, default model
+├── loading.html            # Splash page opened on startup
+├── requirements.txt        # Python dependencies
+├── Dockerfile              # Dashboard image definition
+├── docker-compose.yaml     # Two-service stack (dashboard + ollama + model-puller)
+├── .dockerignore           # Excludes .git, __pycache__, venv from the build context
+├── .env.example            # Template for runtime configuration
+└── data/                   # ← your CSVs live here (bind-mounted into the container)
+    ├── data.csv
+    ├── categories.csv
+    └── payment_methods.csv
+```
+
+---
+
+## 🔐 Privacy
+
+This project is designed to keep your financial data on your machine:
+
+- ✅ CSVs never leave the host filesystem
+- ✅ The LLM runs locally in the `ollama` container — no API calls to OpenAI, Anthropic, or anyone else
+- ✅ The dashboard doesn't make outbound HTTP requests during normal operation
+- ⚠️ The first run **does** require internet to pull the Docker image and the LLM model
+
+After the initial setup, you can disconnect from the internet and the dashboard will keep working.
+
+---
+
+## 🛣️ Roadmap
+
+- [ ] Excel import (in addition to CSV)
+- [ ] Budget vs. actual tracking per category
+- [ ] Recurring transaction detection
+- [ ] Forecast next month's expenses based on installments already scheduled
+- [ ] Multi-currency support
+- [ ] Mobile-friendly layout
+
+---
+
+## 📜 License
+
+MIT — see `LICENSE`.
+
+## 👤 Author
+
+**Cassiano Ribeiro Carneiro** — [@cassianorcarneiro](https://github.com/cassianorcarneiro)
+
+---
+
+> *Built for people who want financial insights without trusting their bank statements to a third-party API.*

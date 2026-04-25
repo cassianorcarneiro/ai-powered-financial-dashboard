@@ -3,23 +3,52 @@ services:
     build: .
     container_name: financial-dashboard
     ports:
-      - "8050:8050"
+      - "${DASHBOARD_PORT:-8050}:8050"
     environment:
       - OLLAMA_URL=http://ollama:11434
-      - OLLAMA_MODEL=llama3.2:3b
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+      - TZ=${TZ:-America/Sao_Paulo}
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
     volumes:
-      # opcional: persistir seus CSVs/bancos fora do container
+      # Persist CSVs/databases on the host, outside the container lifecycle
       - ./data:/app/data
+    restart: unless-stopped
 
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
     ports:
-      - "11434:11434"   # opcional (útil para testar do host)
+      - "11434:11434"   # Exposed for testing from the host; remove if not needed
     volumes:
       - ollama:/root/.ollama
+    healthcheck:
+      # Ensures the dashboard waits until Ollama actually answers HTTP requests
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  # One-shot helper: pulls the configured model on first startup, then exits.
+  # Skip this service if you prefer to pull manually with `docker exec`.
+  model-puller:
+    image: ollama/ollama:latest
+    container_name: ollama-model-puller
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+    entrypoint: >
+      /bin/sh -c "
+        echo 'Pulling model: ${OLLAMA_MODEL:-llama3.2:3b}...';
+        ollama pull ${OLLAMA_MODEL:-llama3.2:3b} && echo 'Model ready.' || echo 'Pull failed (model may already exist).';
+      "
+    restart: "no"
 
 volumes:
   ollama:

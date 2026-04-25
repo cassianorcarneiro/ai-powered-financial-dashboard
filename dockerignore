@@ -1,0 +1,47 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Python artifacts
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+
+# Virtual environments
+venv
+.venv
+env
+.env
+
+# IDE
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# Documentation and examples not needed in the image
+README.md
+*.md
+LICENSE
+docs/
+examples/
+
+# Data should be mounted as a volume, not baked into the image
+# (comment the next line if you want a default dataset shipped with the image)
+data/*.csv
+
+# Compose / Docker artifacts
+docker-compose*.yaml
+docker-compose*.yml
+Dockerfile.dev
+.dockerignore
+
+# Logs
+*.log

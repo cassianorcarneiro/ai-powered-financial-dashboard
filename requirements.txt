@@ -1,8 +1,8 @@
 dash
 dash-bootstrap-components
-pandas
+dash-auth
 plotly
-python-dateutil
-uuid
-datetime
+pandas
+matplotlib
+requests
 python-dateutil
