@@ -1,6 +1,4 @@
-﻿Name;Close Date;Payment Date;Type
-Credit Card 1;1.0;10.0;Credit
-Credit Card 2;2.0;9.0;Credit
-Credit Card 3;2.0;9.0;Credit
-Credit Card 4;2.0;9.0;Credit
-Money;;;Debit
+Name;Close Date;Payment Date;Type
+Checking Account;;;Debit
+Credit Card A;25;10;Credit
+Credit Card B;5;15;Credit
