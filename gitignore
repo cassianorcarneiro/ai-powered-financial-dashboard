@@ -1,0 +1,31 @@
+# Local configuration and secrets
+.env
+
+# Financial data — never commit personal transaction history
+data/*.csv
+!data/.gitkeep
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log

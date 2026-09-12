@@ -1,30 +1,65 @@
+# =============================================================================
+# Two ways to run this stack:
+#
+#   1. Bundled Ollama (default) — brings up its own Ollama container and pulls
+#      the configured model automatically:
+#
+#        docker compose --profile bundled-ollama up -d --build
+#
+#   2. Existing Ollama — reuses an Ollama you already run on the host, which is
+#      the right choice when that instance has GPU access:
+#
+#        docker compose up -d --build
+#
+#      Set OLLAMA_URL in .env to reach it. On Linux the Docker bridge gateway is
+#      usually http://172.17.0.1:11434; confirm with `ip addr show docker0`. The
+#      host Ollama must listen on that address rather than on 127.0.0.1 only.
+# =============================================================================
+
 services:
   dashboard:
     build: .
+    image: financial-dashboard:latest
     container_name: financial-dashboard
     ports:
       - "${DASHBOARD_PORT:-8050}:8050"
     environment:
-      - OLLAMA_URL=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
-      - TZ=${TZ:-America/Sao_Paulo}
-    depends_on:
-      ollama:
-        condition: service_healthy
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120}
+      TZ: ${TZ:-UTC}
+      CURRENCY: ${CURRENCY:-BRL}
+      REQUEST_PASSWORD: ${REQUEST_PASSWORD:-0}
+      DASHBOARD_USERS: ${DASHBOARD_USERS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
-      # Persist CSVs/databases on the host, outside the container lifecycle
+      # CSVs live on the host, outside the container lifecycle.
       - ./data:/app/data
+    # Lets the container reach a host service as host.docker.internal on Linux
+    # as well, which is an alternative to the bridge gateway address.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
+  # --------------------------------------------------------------------------
+  # Optional services, only started with: --profile bundled-ollama
+  # --------------------------------------------------------------------------
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
-    ports:
-      - "11434:11434"   # Exposed for testing from the host; remove if not needed
+    profiles: ["bundled-ollama"]
     volumes:
       - ollama:/root/.ollama
+    # Uncomment to give the bundled Ollama access to an NVIDIA GPU. Requires the
+    # NVIDIA Container Toolkit on the host; without this block it runs on CPU.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
     healthcheck:
-      # Ensures the dashboard waits until Ollama actually answers HTTP requests
       test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
@@ -32,22 +67,21 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  # One-shot helper: pulls the configured model on first startup, then exits.
-  # Skip this service if you prefer to pull manually with `docker exec`.
   model-puller:
     image: ollama/ollama:latest
     container_name: ollama-model-puller
+    profiles: ["bundled-ollama"]
     depends_on:
       ollama:
         condition: service_healthy
     environment:
-      - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
-    entrypoint: >
-      /bin/sh -c "
-        echo 'Pulling model: ${OLLAMA_MODEL:-llama3.2:3b}...';
-        ollama pull ${OLLAMA_MODEL:-llama3.2:3b} && echo 'Model ready.' || echo 'Pull failed (model may already exist).';
-      "
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        MODEL="${OLLAMA_MODEL:-llama3.2:3b}"
+        echo "Pulling model: $$MODEL"
+        ollama pull "$$MODEL" && echo "Model ready." || echo "Pull failed; it may already exist."
     restart: "no"
 
 volumes:

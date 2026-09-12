@@ -1,31 +1,46 @@
 FROM python:3.12-slim
 
-WORKDIR /app
-
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
-# System packages: only what's strictly needed at runtime.
-# Most dependencies (pandas, plotly, dash) ship pre-built wheels for python:3.12-slim,
-# so we no longer pull build-essential/gcc/g++. Slimmer image, faster builds.
+# curl backs the container healthcheck; tzdata is required by zoneinfo, which
+# the app uses to render the "last update" timestamp. Debian slim images do not
+# ship the zone database, so an unset tzdata would make every timezone lookup
+# fail at runtime.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
+        tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies first (better layer caching)
+WORKDIR /app
+
+# Dependencies first so application edits do not invalidate the wheel cache.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application code
 COPY . .
 
-# Ensure the data directory exists even if the host folder is empty on first run
-RUN mkdir -p /app/data
+# Run as an unprivileged user. The data directory is created and owned here so
+# the bind-mounted volume stays writable without granting root to the process.
+RUN useradd --create-home --uid 1000 dashboard \
+    && mkdir -p /app/data \
+    && chown -R dashboard:dashboard /app
+
+USER dashboard
 
 EXPOSE 8050
 
-# Healthcheck: make sure the Dash server is responsive
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://localhost:8050/ >/dev/null || exit 1
+    CMD curl -fsS http://localhost:8050/healthz >/dev/null || exit 1
 
-CMD ["python", "app.py"]
+# Gunicorn rather than the Dash development server. A single worker keeps the
+# CSV read-modify-write cycle inside one process, where the in-process lock in
+# storage.py is sufficient; multiple workers would need external locking.
+CMD ["gunicorn", \
+     "--bind", "0.0.0.0:8050", \
+     "--workers", "1", \
+     "--threads", "4", \
+     "--timeout", "180", \
+     "--access-logfile", "-", \
+     "app:server"]
