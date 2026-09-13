@@ -166,10 +166,10 @@ def _fallback_summary(metrics: dict[str, Any], reason: str) -> str:
         "**Summary generated without AI**",
         "",
         f"- Period: {window['start']} to {window['end']}",
-        f"- Income: {totals['income']:,.2f}",
-        f"- Expenses: {totals['expense']:,.2f}",
-        f"- Net balance: {totals['net']:,.2f}",
-        f"- Average monthly expense: {monthly['expense_mean']:,.2f}",
+        f"- Income: {totals['income']:.2f}",
+        f"- Expenses: {totals['expense']:.2f}",
+        f"- Net balance: {totals['net']:.2f}",
+        f"- Average monthly expense: {monthly['expense_mean']:.2f}",
     ]
 
     trend = monthly.get("expense_trend_3m")
@@ -180,7 +180,7 @@ def _fallback_summary(metrics: dict[str, Any], reason: str) -> str:
     top_categories = metrics.get("top", {}).get("categories", {})
     if top_categories:
         top_name, top_value = next(iter(top_categories.items()))
-        lines.append(f"- Largest category: {top_name} ({top_value:,.2f})")
+        lines.append(f"- Largest category: {top_name} ({top_value:.2f})")
 
     lines += ["", f"_{reason}_"]
     return "\n".join(lines)

@@ -29,6 +29,13 @@ _PASTEL_PALETTE: list[str] = list(px.colors.qualitative.Pastel) + list(px.colors
 # state, including the empty one.
 FIGURE_HEIGHT = 400
 
+# Plotly's `separators` takes the decimal mark followed by the thousands mark.
+# Passing only "." leaves the thousands group empty, so axis ticks and hover
+# labels render as 1000.00 rather than 1,000.00. The grouping comma doubles as a
+# decimal mark in most of the world, which makes it ambiguous on a dashboard of
+# bare amounts; the table and the written summary omit it for the same reason.
+DECIMAL_SEPARATORS = "."
+
 _AXIS_X = dict(showgrid=False, gridcolor=config.gray_1, gridwidth=1.0)
 _AXIS_Y = dict(
     gridcolor=config.gray_1,
@@ -60,6 +67,7 @@ def empty_figure(message: str = "No data available") -> go.Figure:
     fig.update_layout(
         height=FIGURE_HEIGHT,
         autosize=False,
+        separators=DECIMAL_SEPARATORS,
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
         plot_bgcolor=config.blue_2,
@@ -74,6 +82,7 @@ def _apply_common_layout(fig: go.Figure) -> go.Figure:
     fig.update_layout(
         height=FIGURE_HEIGHT,
         autosize=False,
+        separators=DECIMAL_SEPARATORS,
         plot_bgcolor=config.blue_2,
         paper_bgcolor=config.blue_2,
         title_font_color=config.blue_1,

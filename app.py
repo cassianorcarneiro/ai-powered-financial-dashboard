@@ -191,7 +191,9 @@ def build_table_records(df: pd.DataFrame) -> list[dict[str, Any]]:
     view["Record Timestamp"] = view["Record Timestamp"].dt.strftime("%d/%m/%Y %H:%M:%S")
     view["Transaction Date"] = view["Transaction Date"].dt.strftime("%d/%m/%Y")
     view["Payment Date"] = view["Payment Date"].dt.strftime("%d/%m/%Y")
-    view["Amount"] = view["Amount"].map(lambda v: f"{v:,.2f}")
+    # Two decimals, no thousands separator: the grouping comma reads as a decimal
+    # mark in most of the world, so in a table of bare numbers it is ambiguous.
+    view["Amount"] = view["Amount"].map(lambda v: f"{v:.2f}")
 
     return view[ui.TABLE_COLUMNS + [_ISO_DATE_KEY, _HASH_KEY]].to_dict("records")
 
