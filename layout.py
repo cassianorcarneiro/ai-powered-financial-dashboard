@@ -87,11 +87,15 @@ def default_date_range() -> tuple[str, str]:
 # Plotly's default modebar is built for mouse interaction. On touch devices it
 # never appears via hover anyway, so hiding it by default (it still shows on
 # desktop hover) reclaims vertical space without losing functionality there.
+#
+# "responsive" is deliberately absent. It makes Plotly derive the plot height
+# from its container, and the dbc.Col around each graph is auto-sized, so the
+# height stays indeterminate: on a callback-driven re-render Plotly could settle
+# on a taller box than the row reserves and spill over the content below it.
+# charts.py sets an explicit pixel height instead, which is deterministic.
 _GRAPH_CONFIG = {
     "displayModeBar": "hover",
     "displaylogo": False,
-    "responsive": True,
-    "scrollZoom": False,
 }
 
 

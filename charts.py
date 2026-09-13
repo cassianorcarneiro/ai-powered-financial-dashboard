@@ -21,6 +21,14 @@ from config import DATE_FORMAT, Config as config
 # Pastel palette, cycled when a chart has more slices than the palette has colors.
 _PASTEL_PALETTE: list[str] = list(px.colors.qualitative.Pastel) + list(px.colors.qualitative.Set3)
 
+# Every figure declares an explicit pixel height. Left unset, Plotly derives the
+# height from its container, and the auto-sized dbc.Col around each graph gives
+# no definite value to derive from: on a callback-driven re-render the plot could
+# end up taller than the row reserves and overlap the content below. A fixed
+# height makes the rendered box match the space the layout allocates in every
+# state, including the empty one.
+FIGURE_HEIGHT = 400
+
 _AXIS_X = dict(showgrid=False, gridcolor=config.gray_1, gridwidth=1.0)
 _AXIS_Y = dict(
     gridcolor=config.gray_1,
@@ -50,6 +58,8 @@ def empty_figure(message: str = "No data available") -> go.Figure:
         font=dict(size=16, color=config.blue_1),
     )
     fig.update_layout(
+        height=FIGURE_HEIGHT,
+        autosize=False,
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
         plot_bgcolor=config.blue_2,
@@ -62,6 +72,8 @@ def empty_figure(message: str = "No data available") -> go.Figure:
 def _apply_common_layout(fig: go.Figure) -> go.Figure:
     """Apply the shared dark-panel styling."""
     fig.update_layout(
+        height=FIGURE_HEIGHT,
+        autosize=False,
         plot_bgcolor=config.blue_2,
         paper_bgcolor=config.blue_2,
         title_font_color=config.blue_1,
