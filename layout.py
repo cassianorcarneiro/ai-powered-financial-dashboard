@@ -662,10 +662,14 @@ def build_layout() -> html.Div:
                                     "minWidth": "100%",
                                     "WebkitOverflowScrolling": "touch",
                                 },
-                                # Keeps the date column visible while scrolling
-                                # horizontally on a narrow screen, so a row stays
-                                # identifiable even once the rest has scrolled off.
-                                fixed_columns={"headers": True, "data": 1},
+                                # No fixed_columns here on purpose: the DataTable
+                                # implements it by overlaying a second, absolutely
+                                # positioned table whose height is measured in
+                                # JavaScript. That measurement goes stale whenever a
+                                # callback replaces the data, leaving the overlay
+                                # sized for the previous row count and painted over
+                                # the charts above. Plain horizontal scrolling is
+                                # correct in every state.
                                 style_header={
                                     "backgroundColor": config.blue_2,
                                     "color": config.blue_1,
