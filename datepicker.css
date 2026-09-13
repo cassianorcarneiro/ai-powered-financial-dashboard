@@ -2,39 +2,36 @@
    AI POWERED FINANCIAL DASHBOARD
    dcc.DatePickerSingle restyling.
 
-   The component ships react-dates' own stylesheet, which knows nothing about
-   Bootstrap: the field ends up shorter, differently bordered and visually out
-   of place next to a dbc.Input. These rules map it onto Bootstrap's
-   .form-control appearance so both fields look like one set.
+   The component ships its own stylesheet, which knows nothing about Bootstrap:
+   the field ends up shorter and differently bordered than the dbc.Input next to
+   it. These rules map it onto Bootstrap's .form-control appearance so both
+   fields read as one set.
 
-   Selectors are react-dates' internal class names, which is the only styling
-   surface the component exposes.
+   Selectors are the component's internal class names (dash-datepicker-*), which
+   are the only styling surface it exposes.
    ============================================================================= */
 
-/* ---- Wrappers: react-dates sizes these to content, Bootstrap expects 100% -- */
-.SingleDatePicker,
-.SingleDatePickerInput,
-.DateInput {
+/* ---- Wrappers: sized to content by default, Bootstrap expects full width --- */
+.dash-datepicker {
   width: 100% !important;
+  box-sizing: border-box !important;
   background: transparent !important;
-}
-
-.SingleDatePickerInput {
   border: none !important;
-  border-radius: 0 !important;
 }
 
-/* ---- The field itself: match .form-control ------------------------------- */
-.DateInput_input {
+/* ---- The field itself: match Bootstrap 5 .form-control -------------------- */
+/* The component lays this out as `display: grid` with `justify-items: start`,
+   which is what keeps the field narrow and left-hugging. Switching to flex and
+   letting the input flex-grow is what actually makes it fill the column. */
+.dash-datepicker-input-wrapper {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
   width: 100% !important;
   box-sizing: border-box !important;
 
-  /* Bootstrap 5 .form-control geometry */
   padding: 0.375rem 0.75rem !important;
   min-height: 44px !important; /* touch target, consistent with the buttons */
-  font-size: 1rem !important;
-  font-weight: 400 !important;
-  line-height: 1.5 !important;
 
   color: #212529 !important;
   background-color: #fff !important;
@@ -44,49 +41,71 @@
   transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
 }
 
-/* react-dates draws a thick underline on the focused input; replace it with
-   Bootstrap's focus ring so the two field types highlight identically. */
-.DateInput_input__focused {
-  border: 1px solid #86b7fe !important;
-  border-bottom: 1px solid #86b7fe !important;
+.dash-datepicker-input-wrapper:focus-within {
+  border-color: #86b7fe !important;
   box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
   outline: 0 !important;
 }
 
-.DateInput_input::placeholder {
+/* Overrides the component's own `height: 32px` and `width: fit-content`,
+   the two declarations responsible for the short, narrow field. */
+.dash-datepicker-input {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+
+  font-size: 1rem !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+  color: #212529 !important;
+}
+
+.dash-datepicker-input::placeholder {
   color: #6c757d !important;
   opacity: 1 !important;
 }
 
-/* ---- Calendar popup ------------------------------------------------------ */
-/* Raised above dbc.Modal, whose stacking context would otherwise clip the
-   calendar when the picker is used inside the New Record dialog. */
-.SingleDatePicker_picker {
+.dash-datepicker-input-wrapper-disabled {
+  background-color: #e9ecef !important;
+  opacity: 1 !important;
+}
+
+/* ---- Trailing icons ------------------------------------------------------- */
+.dash-datepicker-clear,
+.dash-datepicker-caret-icon {
+  flex: 0 0 auto !important;
+  color: #6c757d !important;
+}
+
+/* ---- Calendar popup ------------------------------------------------------- */
+/* Raised above dbc.Modal, whose stacking context would otherwise cover it. */
+.dash-datepicker-content,
+.dash-datepicker-portal {
   z-index: 1060 !important;
 }
 
-.DayPicker__withBorder {
+.dash-datepicker-calendar-wrapper,
+.dash-datepicker-calendar-container {
   border-radius: 0.375rem !important;
   box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
 }
 
-/* Selected day in Bootstrap's primary blue rather than react-dates' teal. */
-.CalendarDay__selected,
-.CalendarDay__selected:active,
-.CalendarDay__selected:hover {
+/* Selected day in Bootstrap's primary blue. */
+.dash-datepicker-calendar-date-selected {
   background: #0d6efd !important;
   border-color: #0d6efd !important;
   color: #fff !important;
 }
 
-.CalendarDay__today {
-  font-weight: 700 !important;
+.dash-datepicker-calendar-date-highlighted {
+  background: #e7f1ff !important;
 }
 
-/* The small clear ("x") button sits off-center once the input is taller. */
-.SingleDatePickerInput_clearDate {
-  top: 50% !important;
-  transform: translateY(-50%) !important;
-  margin: 0 !important;
-  right: 8px !important;
+.dash-datepicker-calendar-date-disabled {
+  color: #adb5bd !important;
 }
