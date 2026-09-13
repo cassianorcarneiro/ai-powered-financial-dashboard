@@ -163,14 +163,24 @@ def _ai_card() -> dbc.Card:
 DATE_DISPLAY_FORMAT = "DD/MM/YYYY"
 
 
-def _date_picker(picker_id: str, initial: str | None = None) -> dcc.DatePickerSingle:
-    """Date field rendered in day/month/year regardless of browser locale."""
+def _date_picker(
+    picker_id: str,
+    initial: str | None = None,
+    in_modal: bool = False,
+) -> dcc.DatePickerSingle:
+    """Date field rendered in day/month/year regardless of browser locale.
+
+    Inside a dbc.Modal the calendar would be clipped by the dialog's own
+    stacking and overflow, so those pickers render the calendar in a portal
+    attached to the document body instead.
+    """
     return dcc.DatePickerSingle(
         id=picker_id,
         date=initial,
         display_format=DATE_DISPLAY_FORMAT,
         placeholder="DD/MM/YYYY",
         clearable=True,
+        with_portal=in_modal,
         style={"width": "100%"},
     )
 
@@ -233,7 +243,7 @@ def _new_record_modal() -> dbc.Modal:
                             dbc.Col(
                                 [
                                     dbc.Label("Transaction Date"),
-                                    _date_picker("input-date"),
+                                    _date_picker("input-date", in_modal=True),
                                 ],
                                 xs=12,
                                 md=6,

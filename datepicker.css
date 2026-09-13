@@ -1,0 +1,92 @@
+/* =============================================================================
+   AI POWERED FINANCIAL DASHBOARD
+   dcc.DatePickerSingle restyling.
+
+   The component ships react-dates' own stylesheet, which knows nothing about
+   Bootstrap: the field ends up shorter, differently bordered and visually out
+   of place next to a dbc.Input. These rules map it onto Bootstrap's
+   .form-control appearance so both fields look like one set.
+
+   Selectors are react-dates' internal class names, which is the only styling
+   surface the component exposes.
+   ============================================================================= */
+
+/* ---- Wrappers: react-dates sizes these to content, Bootstrap expects 100% -- */
+.SingleDatePicker,
+.SingleDatePickerInput,
+.DateInput {
+  width: 100% !important;
+  background: transparent !important;
+}
+
+.SingleDatePickerInput {
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+/* ---- The field itself: match .form-control ------------------------------- */
+.DateInput_input {
+  width: 100% !important;
+  box-sizing: border-box !important;
+
+  /* Bootstrap 5 .form-control geometry */
+  padding: 0.375rem 0.75rem !important;
+  min-height: 44px !important; /* touch target, consistent with the buttons */
+  font-size: 1rem !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+
+  color: #212529 !important;
+  background-color: #fff !important;
+  border: 1px solid #ced4da !important;
+  border-radius: 0.375rem !important;
+
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+/* react-dates draws a thick underline on the focused input; replace it with
+   Bootstrap's focus ring so the two field types highlight identically. */
+.DateInput_input__focused {
+  border: 1px solid #86b7fe !important;
+  border-bottom: 1px solid #86b7fe !important;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+  outline: 0 !important;
+}
+
+.DateInput_input::placeholder {
+  color: #6c757d !important;
+  opacity: 1 !important;
+}
+
+/* ---- Calendar popup ------------------------------------------------------ */
+/* Raised above dbc.Modal, whose stacking context would otherwise clip the
+   calendar when the picker is used inside the New Record dialog. */
+.SingleDatePicker_picker {
+  z-index: 1060 !important;
+}
+
+.DayPicker__withBorder {
+  border-radius: 0.375rem !important;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Selected day in Bootstrap's primary blue rather than react-dates' teal. */
+.CalendarDay__selected,
+.CalendarDay__selected:active,
+.CalendarDay__selected:hover {
+  background: #0d6efd !important;
+  border-color: #0d6efd !important;
+  color: #fff !important;
+}
+
+.CalendarDay__today {
+  font-weight: 700 !important;
+}
+
+/* The small clear ("x") button sits off-center once the input is taller. */
+.SingleDatePickerInput_clearDate {
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  margin: 0 !important;
+  right: 8px !important;
+}
