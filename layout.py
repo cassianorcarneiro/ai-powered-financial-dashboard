@@ -96,6 +96,18 @@ def default_date_range() -> tuple[str, str]:
 _GRAPH_CONFIG = {
     "displayModeBar": "hover",
     "displaylogo": False,
+    # Re-measures the plot when the container changes size, so a width captured
+    # before the layout settled corrects itself instead of persisting until the
+    # page is reloaded. This is safe alongside the pinned height in charts.py:
+    # with `height` set explicitly, a resize can only adjust the width. It was
+    # the earlier combination of this flag with an indeterminate height that let
+    # charts grow past their row and overlap the table.
+    "responsive": True,
+    # Zoom stays disabled; see the axes' `fixedrange` in charts.py. These two
+    # close the client-side input paths: scrollZoom covers the wheel and the
+    # touch pinch, doubleClick covers the tap-to-reset that would re-autoscale.
+    "scrollZoom": False,
+    "doubleClick": False,
 }
 
 

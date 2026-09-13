@@ -21,12 +21,18 @@ from config import DATE_FORMAT, Config as config
 # Pastel palette, cycled when a chart has more slices than the palette has colors.
 _PASTEL_PALETTE: list[str] = list(px.colors.qualitative.Pastel) + list(px.colors.qualitative.Set3)
 
-# Every figure declares an explicit pixel height. Left unset, Plotly derives the
-# height from its container, and the auto-sized dbc.Col around each graph gives
-# no definite value to derive from: on a callback-driven re-render the plot could
-# end up taller than the row reserves and overlap the content below. A fixed
-# height makes the rendered box match the space the layout allocates in every
-# state, including the empty one.
+# Sizing is split deliberately: the height is pinned, the width is not.
+#
+# `height` is an explicit pixel value because the dbc.Col around each graph is
+# auto-sized. Left to derive its own height, Plotly could settle on a taller box
+# than the row reserves and overlap the content below on a re-render.
+#
+# `autosize` stays on so the width is taken from the container. With autosize
+# off and no explicit width, Plotly falls back to a default width instead of
+# measuring the column, which leaves the chart the wrong size whenever the first
+# paint happens before the layout has settled. autosize only governs dimensions
+# the figure leaves undefined, so it adjusts the width and never touches the
+# pinned height.
 FIGURE_HEIGHT = 400
 
 # Plotly's `separators` takes the decimal mark followed by the thousands mark.
@@ -36,12 +42,23 @@ FIGURE_HEIGHT = 400
 # bare amounts; the table and the written summary omit it for the same reason.
 DECIMAL_SEPARATORS = "."
 
-_AXIS_X = dict(showgrid=False, gridcolor=config.gray_1, gridwidth=1.0)
+# `fixedrange` locks each axis to its computed range. That is what actually
+# disables zooming: with no zoomable range, Plotly ignores scroll wheel, drag
+# selection, double-click autoscale and touch pinch alike, and drops the zoom
+# controls from the modebar. Disabling the gestures one by one in the client
+# config would leave gaps, since each input path is configured separately.
+_AXIS_X = dict(
+    showgrid=False,
+    gridcolor=config.gray_1,
+    gridwidth=1.0,
+    fixedrange=True,
+)
 _AXIS_Y = dict(
     gridcolor=config.gray_1,
     gridwidth=1.0,
     zerolinecolor=config.gray_3,
     zerolinewidth=3.0,
+    fixedrange=True,
 )
 
 
@@ -66,10 +83,11 @@ def empty_figure(message: str = "No data available") -> go.Figure:
     )
     fig.update_layout(
         height=FIGURE_HEIGHT,
-        autosize=False,
+        autosize=True,
         separators=DECIMAL_SEPARATORS,
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
+        dragmode=False,
+        xaxis=dict(visible=False, fixedrange=True),
+        yaxis=dict(visible=False, fixedrange=True),
         plot_bgcolor=config.blue_2,
         paper_bgcolor=config.blue_2,
         margin=dict(t=40, b=40, l=40, r=40),
@@ -81,8 +99,9 @@ def _apply_common_layout(fig: go.Figure) -> go.Figure:
     """Apply the shared dark-panel styling."""
     fig.update_layout(
         height=FIGURE_HEIGHT,
-        autosize=False,
+        autosize=True,
         separators=DECIMAL_SEPARATORS,
+        dragmode=False,
         plot_bgcolor=config.blue_2,
         paper_bgcolor=config.blue_2,
         title_font_color=config.blue_1,

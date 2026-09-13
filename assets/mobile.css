@@ -37,61 +37,6 @@ h1 {
 }
 
 /* -----------------------------------------------------------------------------
-   Sticky first column on the transactions table (narrow screens only).
-
-   The DataTable's own `fixed_columns` option is deliberately not used: it
-   overlays a second, absolutely positioned table whose height is measured in
-   JavaScript, and that measurement goes stale on every callback-driven data
-   change, leaving the overlay painted over the charts above. `position: sticky`
-   is resolved by the browser during layout instead, so there is nothing to keep
-   in sync and no state in which it can desynchronise.
-
-   Scoped to <=992px because horizontal scrolling only happens there; the desktop
-   table fits without it.
-
-   The two colours below mirror Config.blue_3 (#343d46) and Config.blue_2
-   (#58668b). Static assets cannot read the Python config, so a sticky cell's
-   opaque background has to be repeated here; keep them in step with config.py.
-   -------------------------------------------------------------------------- */
-@media (max-width: 992px) {
-  /* Row-selection checkbox column */
-  #table-data .dash-spreadsheet-inner td.dash-select-cell,
-  #table-data .dash-spreadsheet-inner th.dash-select-cell {
-    position: sticky !important;
-    left: 0 !important;
-    z-index: 3;
-    width: 30px !important;
-    min-width: 30px !important;
-    background-color: #343d46; /* opaque: sticky cells are scrolled under */
-  }
-
-  /* First data column, offset by the checkbox column's width */
-  #table-data .dash-spreadsheet-inner td.dash-cell.column-0,
-  #table-data .dash-spreadsheet-inner th.dash-header.column-0,
-  #table-data .dash-spreadsheet-inner th.dash-filter.column-0 {
-    position: sticky !important;
-    left: 30px !important;
-    z-index: 3;
-    background-color: #343d46;
-  }
-
-  /* Header and filter rows sit above the body cells they scroll past */
-  #table-data .dash-spreadsheet-inner th.dash-select-cell,
-  #table-data .dash-spreadsheet-inner th.dash-header.column-0,
-  #table-data .dash-spreadsheet-inner th.dash-filter.column-0 {
-    background-color: #58668b;
-    z-index: 4;
-  }
-
-  /* Separates the frozen column from the content scrolling beneath it */
-  #table-data .dash-spreadsheet-inner td.dash-cell.column-0,
-  #table-data .dash-spreadsheet-inner th.dash-header.column-0,
-  #table-data .dash-spreadsheet-inner th.dash-filter.column-0 {
-    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.25);
-  }
-}
-
-/* -----------------------------------------------------------------------------
    Dismissible alert close button.
 
    Feedback alerts are rendered compact (`py-2`), but Bootstrap positions the
