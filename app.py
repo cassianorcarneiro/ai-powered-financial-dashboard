@@ -436,6 +436,28 @@ def manage_categories(_open, _close, _save, _add, _deletes, is_open, names):
 
 
 # -----------------------------------------------------------------------------
+# Callbacks: new record modal
+# -----------------------------------------------------------------------------
+
+@app.callback(
+    Output("modal", "is_open"),
+    Output("input-category", "options", allow_duplicate=True),
+    Output("input-payment-method", "options", allow_duplicate=True),
+    Input("open-modal", "n_clicks"),
+    Input("btn-close", "n_clicks"),
+    State("modal", "is_open"),
+    prevent_initial_call=True,
+)
+def toggle_record_modal(_open, _close, is_open):
+    """Toggle the record modal, refreshing both dropdowns each time it opens."""
+    return (
+        (not is_open),
+        [{"label": c, "value": c} for c in get_categories()],
+        [{"label": m, "value": m} for m in get_payment_methods()],
+    )
+
+
+# -----------------------------------------------------------------------------
 # Callbacks: insert and delete
 # -----------------------------------------------------------------------------
 
