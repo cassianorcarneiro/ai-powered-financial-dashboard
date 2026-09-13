@@ -2,54 +2,102 @@
    AI POWERED FINANCIAL DASHBOARD
    dcc.DatePickerSingle restyling.
 
-   The component ships its own stylesheet, which knows nothing about Bootstrap:
-   the field ends up shorter and differently bordered than the dbc.Input next to
-   it. These rules map it onto Bootstrap's .form-control appearance so both
-   fields read as one set.
+   The component ships its own styling, which knows nothing about Bootstrap: the
+   field renders shorter and narrower than the dbc.Input beside it. These rules
+   map it onto Bootstrap's .form-control appearance.
 
-   Selectors are the component's internal class names (dash-datepicker-*), which
-   are the only styling surface it exposes.
+   Two things make this harder than a normal override:
+
+   1. Class names differ by Dash major version. Dash 3 renders react-dates
+      markup (.DateInput_input, .SingleDatePicker*); Dash 4 ships its own
+      component (.dash-datepicker-*). Both sets are covered below so the
+      stylesheet keeps working across an upgrade.
+
+   2. react-dates styles through Aphrodite, which injects its rules at runtime
+      and marks them !important. A plain single-class override ties on
+      specificity and loses on order. Every rule here is therefore scoped by the
+      picker's id, so an id+class selector outranks Aphrodite's single class.
    ============================================================================= */
 
-/* ---- Wrappers: sized to content by default, Bootstrap expects full width --- */
-.dash-datepicker {
+/* ---- Outer wrapper: fill the column -------------------------------------- */
+#input-date,
+#date-start,
+#date-end {
+  display: block !important;
   width: 100% !important;
-  box-sizing: border-box !important;
-  background: transparent !important;
-  border: none !important;
 }
 
-/* ---- The field itself: match Bootstrap 5 .form-control -------------------- */
-/* The component lays this out as `display: grid` with `justify-items: start`,
-   which is what keeps the field narrow and left-hugging. Switching to flex and
-   letting the input flex-grow is what actually makes it fill the column. */
-.dash-datepicker-input-wrapper {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
+#input-date .SingleDatePicker,
+#date-start .SingleDatePicker,
+#date-end .SingleDatePicker,
+#input-date .SingleDatePickerInput,
+#date-start .SingleDatePickerInput,
+#date-end .SingleDatePickerInput,
+#input-date .DateInput,
+#date-start .DateInput,
+#date-end .DateInput,
+#input-date .dash-datepicker,
+#date-start .dash-datepicker,
+#date-end .dash-datepicker {
   width: 100% !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* ---- The field itself: match Bootstrap 5 .form-control ------------------- */
+#input-date .DateInput_input,
+#date-start .DateInput_input,
+#date-end .DateInput_input,
+#input-date .dash-datepicker-input-wrapper,
+#date-start .dash-datepicker-input-wrapper,
+#date-end .dash-datepicker-input-wrapper {
   box-sizing: border-box !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 44px !important; /* touch target, matches the buttons */
 
   padding: 0.375rem 0.75rem !important;
-  min-height: 44px !important; /* touch target, consistent with the buttons */
+  font-size: 1rem !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+  font-family: inherit !important;
 
   color: #212529 !important;
   background-color: #fff !important;
   border: 1px solid #ced4da !important;
+  border-bottom: 1px solid #ced4da !important; /* react-dates draws a thick underline */
   border-radius: 0.375rem !important;
-
-  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
 }
 
-.dash-datepicker-input-wrapper:focus-within {
-  border-color: #86b7fe !important;
+/* Bootstrap's focus ring, replacing react-dates' heavy bottom border. */
+#input-date .DateInput_input__focused,
+#date-start .DateInput_input__focused,
+#date-end .DateInput_input__focused,
+#input-date .dash-datepicker-input-wrapper:focus-within,
+#date-start .dash-datepicker-input-wrapper:focus-within,
+#date-end .dash-datepicker-input-wrapper:focus-within {
+  border: 1px solid #86b7fe !important;
+  border-bottom: 1px solid #86b7fe !important;
   box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
   outline: 0 !important;
 }
 
-/* Overrides the component's own `height: 32px` and `width: fit-content`,
-   the two declarations responsible for the short, narrow field. */
-.dash-datepicker-input {
+#input-date .DateInput_input::placeholder,
+#date-start .DateInput_input::placeholder,
+#date-end .DateInput_input::placeholder,
+#input-date .dash-datepicker-input::placeholder,
+#date-start .dash-datepicker-input::placeholder,
+#date-end .dash-datepicker-input::placeholder {
+  color: #6c757d !important;
+  opacity: 1 !important;
+}
+
+/* Dash 4 only: the inner <input> sits inside the styled wrapper. */
+#input-date .dash-datepicker-input,
+#date-start .dash-datepicker-input,
+#date-end .dash-datepicker-input {
   flex: 1 1 auto !important;
   width: 100% !important;
   min-width: 0 !important;
@@ -58,54 +106,47 @@
   border: none !important;
   outline: none !important;
   background: transparent !important;
-
-  font-size: 1rem !important;
-  font-weight: 400 !important;
-  line-height: 1.5 !important;
-  color: #212529 !important;
+  font: inherit !important;
+  color: inherit !important;
 }
 
-.dash-datepicker-input::placeholder {
-  color: #6c757d !important;
-  opacity: 1 !important;
-}
-
-.dash-datepicker-input-wrapper-disabled {
-  background-color: #e9ecef !important;
-  opacity: 1 !important;
-}
-
-/* ---- Trailing icons ------------------------------------------------------- */
-.dash-datepicker-clear,
-.dash-datepicker-caret-icon {
-  flex: 0 0 auto !important;
-  color: #6c757d !important;
+/* ---- Clear ("x") button --------------------------------------------------- */
+#input-date .SingleDatePickerInput_clearDate,
+#date-start .SingleDatePickerInput_clearDate,
+#date-end .SingleDatePickerInput_clearDate {
+  top: 50% !important;
+  right: 8px !important;
+  margin: 0 !important;
+  padding: 4px !important;
+  transform: translateY(-50%) !important;
 }
 
 /* ---- Calendar popup ------------------------------------------------------- */
-/* Raised above dbc.Modal, whose stacking context would otherwise cover it. */
+/* dbc.Modal sits at z-index 1055; the calendar has to clear it. */
+.SingleDatePicker_picker,
+.DayPicker_portal,
 .dash-datepicker-content,
 .dash-datepicker-portal {
   z-index: 1060 !important;
 }
 
+.DayPicker__withBorder,
 .dash-datepicker-calendar-wrapper,
 .dash-datepicker-calendar-container {
   border-radius: 0.375rem !important;
   box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
 }
 
-/* Selected day in Bootstrap's primary blue. */
+/* Selected day in Bootstrap's primary blue rather than the default teal. */
+.CalendarDay__selected,
+.CalendarDay__selected:hover,
+.CalendarDay__selected:active,
 .dash-datepicker-calendar-date-selected {
   background: #0d6efd !important;
   border-color: #0d6efd !important;
   color: #fff !important;
 }
 
-.dash-datepicker-calendar-date-highlighted {
-  background: #e7f1ff !important;
-}
-
-.dash-datepicker-calendar-date-disabled {
-  color: #adb5bd !important;
+.CalendarDay__today {
+  font-weight: 700 !important;
 }
