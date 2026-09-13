@@ -90,3 +90,21 @@ h1 {
     box-shadow: 2px 0 4px rgba(0, 0, 0, 0.25);
   }
 }
+
+/* -----------------------------------------------------------------------------
+   Dismissible alert close button.
+
+   Feedback alerts are rendered compact (`py-2`), but Bootstrap positions the
+   close button absolutely with a fixed `padding: 1.25rem 1rem` sized for an
+   alert of default height. In a shortened alert that padding makes the button
+   taller than the box it sits in, so it reads as misaligned. Centring it on the
+   vertical axis and trimming the padding keeps it inside the alert at any
+   height, which matters because these alerts wrap to two lines on narrow
+   screens.
+   -------------------------------------------------------------------------- */
+.alert-dismissible .btn-close {
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.75rem;
+  background-size: 0.75em;
+}
