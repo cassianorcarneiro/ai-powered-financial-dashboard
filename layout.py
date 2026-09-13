@@ -96,8 +96,17 @@ _GRAPH_CONFIG = {
 
 
 def _graph(graph_id: str) -> dcc.Graph:
-    """A dcc.Graph with the shared mobile-friendly config applied."""
-    return dcc.Graph(id=graph_id, config=_GRAPH_CONFIG, style={"height": "100%"})
+    """A dcc.Graph with the shared mobile-friendly config applied.
+
+    No height is set here on purpose. A percentage height only resolves against
+    a parent with a definite height, and the dbc.Col wrapping each graph is
+    auto-sized, so `height: 100%` leaves the container indeterminate. Plotly
+    then re-measures it on every callback-driven re-render and can settle on a
+    height that no longer matches the space the column reserves, which is what
+    made the table overlap the charts after a delete. Plotly's own default
+    height applies instead, and `responsive` keeps it adapting to width.
+    """
+    return dcc.Graph(id=graph_id, config=_GRAPH_CONFIG)
 
 
 def _icon_button(icon_class: str, button_id: str, tooltip: str) -> html.Span:
