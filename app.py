@@ -18,6 +18,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import Dash, Input, Output, State, callback_context, html, no_update
@@ -36,6 +37,7 @@ from storage import (
     get_categories,
     get_payment_method,
     get_payment_methods,
+    load_categories,
     load_payment_methods,
     load_transactions,
     save_categories,
@@ -258,8 +260,8 @@ def toggle_filters(_n_clicks, is_open):
 
 
 @app.callback(
-    Output("date-start", "value"),
-    Output("date-end", "value"),
+    Output("date-start", "date"),
+    Output("date-end", "date"),
     Input("reset-btn", "n_clicks"),
     prevent_initial_call=True,
 )
@@ -272,150 +274,165 @@ def reset_filters(_n_clicks):
 # Callbacks: payment methods
 # -----------------------------------------------------------------------------
 
+def _collect_payment_methods(names, types, close_days, pay_days) -> list[dict[str, Any]]:
+    """Rebuild records from the pattern-matched inputs, dropping blank rows."""
+    records = []
+    for name, method_type, close_day, pay_day in zip(
+        names or [], types or [], close_days or [], pay_days or []
+    ):
+        name = (name or "").strip()
+        if not name and not method_type:
+            continue
+        records.append(
+            {
+                "Name": name,
+                "Type": method_type or "",
+                "Close Date": close_day if close_day not in (None, "") else "",
+                "Payment Date": pay_day if pay_day not in (None, "") else "",
+            }
+        )
+    return records
+
+
+def _validate_payment_methods(rows: list[dict[str, Any]]) -> None:
+    """Reject payment methods that would break installment date computation."""
+    seen: set[str] = set()
+    for row in rows:
+        name = str(row.get("Name", "")).strip()
+        method_type = str(row.get("Type", "")).strip()
+        if not name:
+            raise ValueError("Every payment method needs a name.")
+        if name in seen:
+            raise ValueError(f"Duplicate payment method name: {name}.")
+        seen.add(name)
+        if method_type not in {"Credit", "Debit"}:
+            raise ValueError(f"{name}: choose a type, either Credit or Debit.")
+        if method_type == "Credit":
+            for field in ("Close Date", "Payment Date"):
+                raw = row.get(field)
+                if raw in (None, "", "nan"):
+                    raise ValueError(f"{name}: credit methods require a {field.lower()}.")
+                try:
+                    day = int(float(raw))
+                except (TypeError, ValueError):
+                    raise ValueError(f"{name}: {field.lower()} must be a whole number.") from None
+                if not 1 <= day <= 31:
+                    raise ValueError(f"{name}: {field.lower()} must be between 1 and 31.")
+
+
 @app.callback(
     Output("modal-payment-methods", "is_open"),
+    Output("pm-rows-container", "children"),
     Output("input-payment-method", "options"),
     Output("payment-methods-feedback", "children"),
     Input("open-payment-methods-modal", "n_clicks"),
     Input("btn-close-payment-methods", "n_clicks"),
     Input("btn-save-payment-methods", "n_clicks"),
+    Input("btn-add-payment-method", "n_clicks"),
+    Input({"type": "pm-delete", "index": dash.ALL}, "n_clicks"),
     State("modal-payment-methods", "is_open"),
-    State("table-payment-methods", "data"),
+    State({"type": "pm-name", "index": dash.ALL}, "value"),
+    State({"type": "pm-type", "index": dash.ALL}, "value"),
+    State({"type": "pm-close", "index": dash.ALL}, "value"),
+    State({"type": "pm-pay", "index": dash.ALL}, "value"),
     prevent_initial_call=True,
 )
-def manage_payment_methods(_open, _close, _save, is_open, table_data):
-    """Open, close, or persist the payment-method table."""
+def manage_payment_methods(
+    _open, _close, _save, _add, _deletes, is_open, names, types, close_days, pay_days
+):
+    """Open, close, add, delete, or persist payment methods.
+
+    Every branch re-renders the whole row list from the values currently in the
+    inputs, so edits typed before pressing Add or Delete are never discarded.
+    """
     trigger = callback_context.triggered_id
+    current = _collect_payment_methods(names, types, close_days, pay_days)
+    options = lambda: [{"label": m, "value": m} for m in get_payment_methods()]
+
+    if trigger == "btn-add-payment-method":
+        current.append({"Name": "", "Type": "", "Close Date": "", "Payment Date": ""})
+        return True, ui.build_payment_method_rows(current), options(), None
+
+    if isinstance(trigger, dict) and trigger.get("type") == "pm-delete":
+        # Ignore the callback Dash fires when the delete buttons are first drawn.
+        if not any(_deletes or []):
+            return no_update, no_update, no_update, no_update
+        index = trigger["index"]
+        remaining = [r for i, r in enumerate(current) if i != index]
+        return True, ui.build_payment_method_rows(remaining), options(), None
 
     if trigger == "btn-save-payment-methods":
         try:
-            _validate_payment_methods(table_data or [])
-            save_payment_methods(pd.DataFrame(table_data or []))
-            logger.info("Saved %d payment method(s).", len(table_data or []))
+            _validate_payment_methods(current)
         except ValueError as exc:
-            options = [{"label": m, "value": m} for m in get_payment_methods()]
-            return True, options, alert(str(exc))
+            return True, ui.build_payment_method_rows(current), options(), alert(str(exc))
+        save_payment_methods(pd.DataFrame(current))
+        logger.info("Saved %d payment method(s).", len(current))
+        saved = load_payment_methods().to_dict("records")
+        return False, ui.build_payment_method_rows(saved), options(), None
 
-    options = [{"label": m, "value": m} for m in get_payment_methods()]
-    return (not is_open), options, None
-
-
-def _validate_payment_methods(rows: list[dict[str, Any]]) -> None:
-    """Reject payment methods that would break installment date computation."""
-    for row in rows:
-        name = str(row.get("Name", "")).strip()
-        method_type = str(row.get("Type", "")).strip()
-        if not name or not method_type:
-            continue
-        if method_type not in {"Credit", "Debit"}:
-            raise ValueError(f"{name}: Type must be either Credit or Debit.")
-        if method_type == "Credit":
-            for field in ("Close Date", "Payment Date"):
-                raw = row.get(field)
-                if raw in (None, "", "nan"):
-                    raise ValueError(f"{name}: credit methods require a {field}.")
-                try:
-                    day = int(float(raw))
-                except (TypeError, ValueError):
-                    raise ValueError(f"{name}: {field} must be a whole number.") from None
-                if not 1 <= day <= 31:
-                    raise ValueError(f"{name}: {field} must be between 1 and 31.")
-
-
-@app.callback(
-    Output("table-payment-methods", "columns"),
-    Input("modal-payment-methods", "is_open"),
-)
-def refresh_payment_methods_dropdown(is_open):
-    """Force the Type dropdown to lay itself out once the modal is visible.
-
-    Dash's DataTable measures a dropdown cell's geometry when it first mounts.
-    Mounted while the surrounding dbc.Modal is still closed (display: none),
-    the browser reports a zero-size box and the dropdown never opens when
-    clicked. Re-sending the same columns after the modal opens triggers a
-    fresh layout pass while the table is actually on screen.
-    """
-    if not is_open:
-        return no_update
-    return ui.PAYMENT_METHOD_TABLE_COLUMNS
+    # Open or close: always show what is actually on disk.
+    stored = load_payment_methods().to_dict("records")
+    return (not is_open), ui.build_payment_method_rows(stored), options(), None
 
 
 # -----------------------------------------------------------------------------
 # Callbacks: categories
 # -----------------------------------------------------------------------------
 
+def _collect_categories(names) -> list[dict[str, Any]]:
+    """Rebuild category records from the pattern-matched inputs."""
+    return [{"Name": (name or "").strip()} for name in (names or [])]
+
+
 @app.callback(
     Output("modal-categories", "is_open"),
+    Output("cat-rows-container", "children"),
+    Output("input-category", "options"),
     Output("categories-feedback", "children"),
     Input("open-categories-modal", "n_clicks"),
     Input("btn-close-categories", "n_clicks"),
     Input("btn-save-categories", "n_clicks"),
-    State("modal-categories", "is_open"),
-    State("table-categories", "data"),
-    prevent_initial_call=True,
-)
-def manage_categories(_open, _close, _save, is_open, table_data):
-    """Open, close, or persist the category table."""
-    if callback_context.triggered_id == "btn-save-categories":
-        save_categories(pd.DataFrame(table_data or []))
-        logger.info("Saved %d categorie(s).", len(table_data or []))
-    return (not is_open), None
-
-
-@app.callback(
-    Output("table-categories", "data"),
     Input("btn-add-category", "n_clicks"),
-    State("table-categories", "data"),
-    State("table-categories", "columns"),
+    Input({"type": "cat-delete", "index": dash.ALL}, "n_clicks"),
+    State("modal-categories", "is_open"),
+    State({"type": "cat-name", "index": dash.ALL}, "value"),
     prevent_initial_call=True,
 )
-def add_category_row(_n_clicks, rows, columns):
-    """Append an empty row to the category table."""
-    rows = rows or []
-    rows.append({column["id"]: "" for column in columns})
-    return rows
+def manage_categories(_open, _close, _save, _add, _deletes, is_open, names):
+    """Open, close, add, delete, or persist categories."""
+    trigger = callback_context.triggered_id
+    current = _collect_categories(names)
+    options = lambda: [{"label": c, "value": c} for c in get_categories()]
 
+    if trigger == "btn-add-category":
+        current.append({"Name": ""})
+        return True, ui.build_category_rows(current), options(), None
 
-@app.callback(
-    Output("input-category", "options", allow_duplicate=True),
-    Input("btn-save-categories", "n_clicks"),
-    prevent_initial_call=True,
-)
-def refresh_category_options_after_save(_n_clicks):
-    """Make a newly created category selectable without reopening the page."""
-    return [{"label": c, "value": c} for c in get_categories()]
+    if isinstance(trigger, dict) and trigger.get("type") == "cat-delete":
+        if not any(_deletes or []):
+            return no_update, no_update, no_update, no_update
+        index = trigger["index"]
+        remaining = [r for i, r in enumerate(current) if i != index]
+        return True, ui.build_category_rows(remaining), options(), None
 
+    if trigger == "btn-save-categories":
+        named = [r for r in current if r["Name"]]
+        duplicates = {r["Name"] for r in named if [x["Name"] for x in named].count(r["Name"]) > 1}
+        if duplicates:
+            return (
+                True,
+                ui.build_category_rows(current),
+                options(),
+                alert(f"Duplicate category name(s): {', '.join(sorted(duplicates))}."),
+            )
+        save_categories(pd.DataFrame(named))
+        logger.info("Saved %d category(ies).", len(named))
+        saved = load_categories().to_dict("records")
+        return False, ui.build_category_rows(saved), options(), None
 
-
-@app.callback(
-    Output("table-payment-methods", "data"),
-    Input("btn-add-payment-method", "n_clicks"),
-    State("table-payment-methods", "data"),
-    State("table-payment-methods", "columns"),
-    prevent_initial_call=True,
-)
-def add_payment_method_row(_n_clicks, rows, columns):
-    """Append an empty row to the payment-method table."""
-    rows = rows or []
-    rows.append({column["id"]: "" for column in columns})
-    return rows
-
-
-# -----------------------------------------------------------------------------
-# Callbacks: new record modal
-# -----------------------------------------------------------------------------
-
-@app.callback(
-    Output("modal", "is_open"),
-    Output("input-category", "options"),
-    Input("open-modal", "n_clicks"),
-    Input("btn-close", "n_clicks"),
-    State("modal", "is_open"),
-    prevent_initial_call=True,
-)
-def toggle_record_modal(_open, _close, is_open):
-    """Toggle the record modal, refreshing the category list each time."""
-    return (not is_open), [{"label": c, "value": c} for c in get_categories()]
+    stored = load_categories().to_dict("records")
+    return (not is_open), ui.build_category_rows(stored), options(), None
 
 
 # -----------------------------------------------------------------------------
@@ -427,14 +444,14 @@ def toggle_record_modal(_open, _close, is_open):
     Output("record-feedback", "children"),
     Output("input-label", "value"),
     Output("input-category", "value"),
-    Output("input-date", "value"),
+    Output("input-date", "date"),
     Output("input-amount", "value"),
     Output("input-installments", "value"),
     Output("input-ignore", "value"),
     Input("btn-save", "n_clicks"),
     State("input-label", "value"),
     State("input-category", "value"),
-    State("input-date", "value"),
+    State("input-date", "date"),
     State("input-amount", "value"),
     State("input-installments", "value"),
     State("input-payment-method", "value"),
@@ -557,8 +574,8 @@ def delete_records(_delete_purchase, _delete_installments, rows, selected, trigg
     Output("table-data", "data"),
     Output("table-data", "selected_rows"),
     Input("update-trigger", "data"),
-    Input("date-start", "value"),
-    Input("date-end", "value"),
+    Input("date-start", "date"),
+    Input("date-end", "date"),
 )
 def refresh_views(_trigger, start_date, end_date):
     """Rebuild every chart and the transactions table."""
@@ -625,7 +642,7 @@ def refresh_views(_trigger, start_date, end_date):
     Output("ai-comment", "children"),
     Output("ai-status", "children"),
     Input("update-ai-comment-btn", "n_clicks"),
-    State("date-end", "value"),
+    State("date-end", "date"),
     prevent_initial_call=True,
 )
 def update_ai_comment(_n_clicks, end_date):

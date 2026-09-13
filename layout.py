@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import date
 
 import dash_bootstrap_components as dbc
+import pandas as pd
 from dash import dash_table, dcc, html
 
 from config import Config as config
@@ -155,6 +156,25 @@ def _ai_card() -> dbc.Card:
     )
 
 
+# The browser's native <input type="date"> renders in the locale of the user's
+# operating system, which cannot be overridden from the page. dcc.DatePickerSingle
+# draws its own calendar, so the display format is ours to set. Its value still
+# travels as an ISO yyyy-mm-dd string, which is what the callbacks expect.
+DATE_DISPLAY_FORMAT = "DD/MM/YYYY"
+
+
+def _date_picker(picker_id: str, initial: str | None = None) -> dcc.DatePickerSingle:
+    """Date field rendered in day/month/year regardless of browser locale."""
+    return dcc.DatePickerSingle(
+        id=picker_id,
+        date=initial,
+        display_format=DATE_DISPLAY_FORMAT,
+        placeholder="DD/MM/YYYY",
+        clearable=True,
+        style={"width": "100%"},
+    )
+
+
 def _filters(start_date: str, end_date: str) -> dbc.Collapse:
     """Collapsible date-range filter."""
     return dbc.Collapse(
@@ -165,12 +185,7 @@ def _filters(start_date: str, end_date: str) -> dbc.Collapse:
                         dbc.Col(
                             [
                                 dbc.Label("Start Payment Date"),
-                                dbc.Input(
-                                    id="date-start",
-                                    type="date",
-                                    value=start_date,
-                                    style={"width": "100%"},
-                                ),
+                                _date_picker("date-start", start_date),
                             ],
                             xs=12,
                             md=4,
@@ -180,12 +195,7 @@ def _filters(start_date: str, end_date: str) -> dbc.Collapse:
                         dbc.Col(
                             [
                                 dbc.Label("End Payment Date"),
-                                dbc.Input(
-                                    id="date-end",
-                                    type="date",
-                                    value=end_date,
-                                    style={"width": "100%"},
-                                ),
+                                _date_picker("date-end", end_date),
                             ],
                             xs=12,
                             md=4,
@@ -223,7 +233,7 @@ def _new_record_modal() -> dbc.Modal:
                             dbc.Col(
                                 [
                                     dbc.Label("Transaction Date"),
-                                    dbc.Input(id="input-date", type="date"),
+                                    _date_picker("input-date"),
                                 ],
                                 xs=12,
                                 md=6,
@@ -305,136 +315,214 @@ def _new_record_modal() -> dbc.Modal:
     )
 
 
-PAYMENT_METHOD_TABLE_COLUMNS = [
-    {"name": "Name", "id": "Name", "editable": True},
-    {"name": "Close Date", "id": "Close Date", "editable": True, "type": "numeric"},
-    {"name": "Payment Date", "id": "Payment Date", "editable": True, "type": "numeric"},
-    {"name": "Type", "id": "Type", "editable": True, "presentation": "dropdown"},
-]
-
 PAYMENT_METHOD_TYPE_OPTIONS = [
     {"label": "Credit", "value": "Credit"},
     {"label": "Debit", "value": "Debit"},
 ]
 
 
-CATEGORY_TABLE_COLUMNS = [{"name": "Name", "id": "Name", "editable": True}]
+# These two editors deliberately use plain form controls instead of a
+# dash_table.DataTable. A DataTable nested in a dbc.Modal fights the Bootstrap
+# modal for keyboard and focus control: the modal's focus trap prevents the
+# dropdown editor from opening, and swallows Backspace before the editable cell
+# receives it. Native inputs have neither problem.
 
 
-def _categories_modal() -> dbc.Modal:
-    """Modal for creating, renaming, and deleting categories."""
+def _row_delete_button(kind: str, index: int) -> dbc.Button:
+    """Small remove button for one editor row."""
+    return dbc.Button(
+        html.I(className="fa fa-trash"),
+        id={"type": f"{kind}-delete", "index": index},
+        color="danger",
+        outline=True,
+        style={"minHeight": "44px", "minWidth": "44px"},
+    )
+
+
+def payment_method_row(index: int, record: dict | None = None) -> dbc.Row:
+    """One editable payment-method row."""
+    record = record or {}
+
+    def _day(value) -> str:
+        """Render a stored day as a plain integer string, blank when absent."""
+        try:
+            if value in (None, "") or pd.isna(value):
+                return ""
+            return str(int(float(value)))
+        except (TypeError, ValueError):
+            return ""
+
+    return dbc.Row(
+        [
+            dbc.Col(
+                dbc.Input(
+                    id={"type": "pm-name", "index": index},
+                    type="text",
+                    value=record.get("Name", ""),
+                    placeholder="Name",
+                ),
+                xs=12, md=4, className="mb-2",
+            ),
+            dbc.Col(
+                dbc.Select(
+                    id={"type": "pm-type", "index": index},
+                    options=PAYMENT_METHOD_TYPE_OPTIONS,
+                    value=record.get("Type") or None,
+                    placeholder="Type",
+                ),
+                xs=12, md=3, className="mb-2",
+            ),
+            dbc.Col(
+                dbc.Input(
+                    id={"type": "pm-close", "index": index},
+                    type="number", min=1, max=31, step=1,
+                    value=_day(record.get("Close Date")),
+                    placeholder="Close day",
+                ),
+                xs=6, md=2, className="mb-2",
+            ),
+            dbc.Col(
+                dbc.Input(
+                    id={"type": "pm-pay", "index": index},
+                    type="number", min=1, max=31, step=1,
+                    value=_day(record.get("Payment Date")),
+                    placeholder="Pay day",
+                ),
+                xs=6, md=2, className="mb-2",
+            ),
+            dbc.Col(_row_delete_button("pm", index), xs=12, md=1, className="mb-2"),
+        ],
+        className="g-2 align-items-center",
+    )
+
+
+def category_row(index: int, record: dict | None = None) -> dbc.Row:
+    """One editable category row."""
+    record = record or {}
+    return dbc.Row(
+        [
+            dbc.Col(
+                dbc.Input(
+                    id={"type": "cat-name", "index": index},
+                    type="text",
+                    value=record.get("Name", ""),
+                    placeholder="Category name",
+                ),
+                xs=10, className="mb-2",
+            ),
+            dbc.Col(_row_delete_button("cat", index), xs=2, className="mb-2"),
+        ],
+        className="g-2 align-items-center",
+    )
+
+
+def build_payment_method_rows(records: list[dict]) -> list[dbc.Row]:
+    """Render every payment-method row, numbered so pattern-matching stays stable."""
+    return [payment_method_row(i, r) for i, r in enumerate(records)]
+
+
+def build_category_rows(records: list[dict]) -> list[dbc.Row]:
+    """Render every category row, numbered so pattern-matching stays stable."""
+    return [category_row(i, r) for i, r in enumerate(records)]
+
+
+def _editor_modal(
+    modal_id: str,
+    title: str,
+    hint: str,
+    container_id: str,
+    feedback_id: str,
+    add_button_id: str,
+    save_button_id: str,
+    close_button_id: str,
+    header: dbc.Row | None,
+    initial_rows: list[dbc.Row],
+) -> dbc.Modal:
+    """Shared shell for the two list editors."""
+    body: list = [
+        dbc.Alert(
+            hint, color="secondary", className="py-2",
+            style={"fontSize": config.fontsize_1},
+        )
+    ]
+    if header is not None:
+        body.append(header)
+    body += [
+        html.Div(id=container_id, children=initial_rows),
+        html.Div(id=feedback_id, className="mt-2"),
+        dbc.Button(
+            [html.I(className="fa fa-plus me-2"), "Add"],
+            id=add_button_id,
+            className="mt-2",
+            style={**ICON_BUTTON_STYLE, "color": "white"},
+        ),
+    ]
+
     return dbc.Modal(
         [
-            dbc.ModalHeader("Manage Categories", style=MODAL_HEADER_STYLE),
-            dbc.ModalBody(
-                [
-                    dbc.Alert(
-                        "Categories used by existing records are not renamed "
-                        "automatically here — this only edits the selectable list.",
-                        color="secondary",
-                        className="py-2",
-                        style={"fontSize": config.fontsize_1},
-                    ),
-                    dash_table.DataTable(
-                        id="table-categories",
-                        columns=CATEGORY_TABLE_COLUMNS,
-                        data=load_categories().to_dict("records"),
-                        editable=True,
-                        row_deletable=True,
-                        style_table={"overflowX": "auto"},
-                        style_header={
-                            "backgroundColor": config.blue_2,
-                            "color": "white",
-                            "fontWeight": "bold",
-                        },
-                        style_cell={
-                            "backgroundColor": "white",
-                            "color": "black",
-                            "textAlign": "center",
-                        },
-                    ),
-                    html.Div(id="categories-feedback", className="mt-2"),
-                    dbc.Button(
-                        "Add row",
-                        id="btn-add-category",
-                        className="mt-2 float-end",
-                        style={**ICON_BUTTON_STYLE, "color": "white"},
-                    ),
-                ],
-                style={"backgroundColor": config.gray_1, "padding": "30px"},
-            ),
+            dbc.ModalHeader(title, style=MODAL_HEADER_STYLE),
+            dbc.ModalBody(body, style={"backgroundColor": config.gray_1, "padding": "24px"}),
             dbc.ModalFooter(
                 [
-                    dbc.Button("Save", id="btn-save-categories", style=PRIMARY_BUTTON_STYLE),
-                    dbc.Button("Close", id="btn-close-categories", style=SECONDARY_BUTTON_STYLE),
+                    dbc.Button("Save", id=save_button_id, style=PRIMARY_BUTTON_STYLE),
+                    dbc.Button("Close", id=close_button_id, style=SECONDARY_BUTTON_STYLE),
                 ],
                 style={"backgroundColor": config.gray_1},
             ),
         ],
-        id="modal-categories",
+        id=modal_id,
         is_open=False,
+        size="lg",
     )
 
 
 def _payment_methods_modal() -> dbc.Modal:
-    """Modal for editing the payment-method table in place."""
-    return dbc.Modal(
+    """Modal for creating, editing and removing payment methods."""
+    header = dbc.Row(
         [
-            dbc.ModalHeader("Manage Payment Methods", style=MODAL_HEADER_STYLE),
-            dbc.ModalBody(
-                [
-                    dbc.Alert(
-                        "Type must be either Credit or Debit. Credit methods require a "
-                        "statement close day and a payment day (1-31); debit methods can "
-                        "leave both empty.",
-                        color="secondary",
-                        className="py-2",
-                        style={"fontSize": config.fontsize_1},
-                    ),
-                    dash_table.DataTable(
-                        id="table-payment-methods",
-                        columns=PAYMENT_METHOD_TABLE_COLUMNS,
-                        dropdown={"Type": {"options": PAYMENT_METHOD_TYPE_OPTIONS}},
-                        data=load_payment_methods().to_dict("records"),
-                        editable=True,
-                        row_deletable=True,
-                        style_table={"overflowX": "auto"},
-                        style_header={
-                            "backgroundColor": config.blue_2,
-                            "color": "white",
-                            "fontWeight": "bold",
-                        },
-                        style_cell={
-                            "backgroundColor": "white",
-                            "color": "black",
-                            "textAlign": "center",
-                        },
-                    ),
-                    html.Div(id="payment-methods-feedback", className="mt-2"),
-                    dbc.Button(
-                        "Add row",
-                        id="btn-add-payment-method",
-                        className="mt-2 float-end",
-                        style={**ICON_BUTTON_STYLE, "color": "white"},
-                    ),
-                ],
-                style={"backgroundColor": config.gray_1, "padding": "30px"},
-            ),
-            dbc.ModalFooter(
-                [
-                    dbc.Button(
-                        "Save", id="btn-save-payment-methods", style=PRIMARY_BUTTON_STYLE
-                    ),
-                    dbc.Button(
-                        "Close", id="btn-close-payment-methods", style=SECONDARY_BUTTON_STYLE
-                    ),
-                ],
-                style={"backgroundColor": config.gray_1},
-            ),
+            dbc.Col(html.Small("Name"), xs=12, md=4),
+            dbc.Col(html.Small("Type"), xs=12, md=3),
+            dbc.Col(html.Small("Close day"), xs=6, md=2),
+            dbc.Col(html.Small("Pay day"), xs=6, md=2),
+            dbc.Col(width=1),
         ],
-        id="modal-payment-methods",
-        is_open=False,
-        size="xl",
+        className="g-2 d-none d-md-flex fw-bold",
+    )
+    return _editor_modal(
+        modal_id="modal-payment-methods",
+        title="Manage Payment Methods",
+        hint=(
+            "Credit methods need a statement close day and a payment day (1-31). "
+            "Debit methods can leave both empty."
+        ),
+        container_id="pm-rows-container",
+        feedback_id="payment-methods-feedback",
+        add_button_id="btn-add-payment-method",
+        save_button_id="btn-save-payment-methods",
+        close_button_id="btn-close-payment-methods",
+        header=header,
+        initial_rows=build_payment_method_rows(
+            load_payment_methods().to_dict("records")
+        ),
+    )
+
+
+def _categories_modal() -> dbc.Modal:
+    """Modal for creating, renaming and removing categories."""
+    return _editor_modal(
+        modal_id="modal-categories",
+        title="Manage Categories",
+        hint=(
+            "Categories already used by existing records are not renamed "
+            "automatically here; this only edits the selectable list."
+        ),
+        container_id="cat-rows-container",
+        feedback_id="categories-feedback",
+        add_button_id="btn-add-category",
+        save_button_id="btn-save-categories",
+        close_button_id="btn-close-categories",
+        header=None,
+        initial_rows=build_category_rows(load_categories().to_dict("records")),
     )
 
 
