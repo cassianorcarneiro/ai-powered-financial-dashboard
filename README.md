@@ -21,6 +21,7 @@ A Python-based personal finance dashboard that turns CSV-stored transactions int
 - 🔒 **Privacy-first** — all data stays on your machine; the LLM runs locally
 - 💾 **Persistent data** — your CSVs live on the host filesystem, untouched by container restarts
 - 🛟 **Graceful degradation** — when the model is unavailable or out of memory, a deterministic summary is shown instead of an error
+- 📱 **Usable on a phone** — charts stack to a single column, controls meet minimum touch-target sizes, and the table keeps its first column in view while scrolling sideways
 
 ---
 
@@ -343,6 +344,9 @@ An existing CSV does not match the expected header. Compare it against the table
 ├── insights.py             # Ollama client, prompt, fallback summary
 ├── charts.py               # Plotly figure factory
 ├── layout.py               # Dash component tree
+├── assets/                 # Served automatically by Dash
+│   ├── mobile.css          # Responsive tweaks, sticky first table column
+│   └── datepicker.css      # Aligns the date field with Bootstrap form controls
 ├── requirements.txt        # Python dependencies
 ├── Dockerfile              # Dashboard image (non-root, Gunicorn)
 ├── docker-compose.yaml     # Dashboard, plus optional bundled Ollama
