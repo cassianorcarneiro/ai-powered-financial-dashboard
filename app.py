@@ -38,6 +38,7 @@ from storage import (
     get_payment_methods,
     load_payment_methods,
     load_transactions,
+    save_categories,
     save_payment_methods,
 )
 
@@ -319,6 +320,71 @@ def _validate_payment_methods(rows: list[dict[str, Any]]) -> None:
                     raise ValueError(f"{name}: {field} must be a whole number.") from None
                 if not 1 <= day <= 31:
                     raise ValueError(f"{name}: {field} must be between 1 and 31.")
+
+
+@app.callback(
+    Output("table-payment-methods", "columns"),
+    Input("modal-payment-methods", "is_open"),
+)
+def refresh_payment_methods_dropdown(is_open):
+    """Force the Type dropdown to lay itself out once the modal is visible.
+
+    Dash's DataTable measures a dropdown cell's geometry when it first mounts.
+    Mounted while the surrounding dbc.Modal is still closed (display: none),
+    the browser reports a zero-size box and the dropdown never opens when
+    clicked. Re-sending the same columns after the modal opens triggers a
+    fresh layout pass while the table is actually on screen.
+    """
+    if not is_open:
+        return no_update
+    return ui.PAYMENT_METHOD_TABLE_COLUMNS
+
+
+# -----------------------------------------------------------------------------
+# Callbacks: categories
+# -----------------------------------------------------------------------------
+
+@app.callback(
+    Output("modal-categories", "is_open"),
+    Output("categories-feedback", "children"),
+    Input("open-categories-modal", "n_clicks"),
+    Input("btn-close-categories", "n_clicks"),
+    Input("btn-save-categories", "n_clicks"),
+    State("modal-categories", "is_open"),
+    State("table-categories", "data"),
+    prevent_initial_call=True,
+)
+def manage_categories(_open, _close, _save, is_open, table_data):
+    """Open, close, or persist the category table."""
+    if callback_context.triggered_id == "btn-save-categories":
+        save_categories(pd.DataFrame(table_data or []))
+        logger.info("Saved %d categorie(s).", len(table_data or []))
+    return (not is_open), None
+
+
+@app.callback(
+    Output("table-categories", "data"),
+    Input("btn-add-category", "n_clicks"),
+    State("table-categories", "data"),
+    State("table-categories", "columns"),
+    prevent_initial_call=True,
+)
+def add_category_row(_n_clicks, rows, columns):
+    """Append an empty row to the category table."""
+    rows = rows or []
+    rows.append({column["id"]: "" for column in columns})
+    return rows
+
+
+@app.callback(
+    Output("input-category", "options", allow_duplicate=True),
+    Input("btn-save-categories", "n_clicks"),
+    prevent_initial_call=True,
+)
+def refresh_category_options_after_save(_n_clicks):
+    """Make a newly created category selectable without reopening the page."""
+    return [{"label": c, "value": c} for c in get_categories()]
+
 
 
 @app.callback(

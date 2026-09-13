@@ -1,0 +1,37 @@
+/* =============================================================================
+   AI POWERED FINANCIAL DASHBOARD
+   Mobile responsiveness. Dash serves every file in assets/ automatically, so
+   nothing in the Python code needs to reference this file directly.
+   ============================================================================= */
+
+/* The title uses clamp() so it scales continuously between a minimum (won't
+   go below this even on the smallest phones) and a maximum (desktop size),
+   rather than jumping abruptly at a single breakpoint. */
+h1 {
+  font-size: clamp(1.5rem, 5vw, 2.5rem) !important;
+}
+
+/* Bootstrap rows already wrap by default; this just tightens the gap and
+   centers the toolbar so icon buttons don't sit flush against the screen
+   edge on a narrow viewport. */
+@media (max-width: 576px) {
+  .container-fluid {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+
+/* Momentum scrolling for the DataTable's horizontal overflow on iOS Safari;
+   without this, dragging the table feels stepped rather than fluid. */
+.dash-table-container .dash-spreadsheet-container {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Plotly's modebar is sized for a mouse cursor. Shrinking it slightly on
+   narrow screens keeps it from overlapping chart titles. */
+@media (max-width: 576px) {
+  .modebar {
+    transform: scale(0.8);
+    transform-origin: top right;
+  }
+}

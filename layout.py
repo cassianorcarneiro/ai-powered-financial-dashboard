@@ -13,7 +13,12 @@ import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
 
 from config import Config as config
-from storage import get_categories, get_payment_methods, load_payment_methods
+from storage import (
+    get_categories,
+    get_payment_methods,
+    load_categories,
+    load_payment_methods,
+)
 
 # -----------------------------------------------------------------------------
 # Reusable style dictionaries
@@ -24,6 +29,7 @@ ICON_BUTTON_STYLE = {
     "borderColor": config.blue_2,
     "color": config.blue_1,
     "fontSize": config.fontsize_1,
+    "minHeight": "44px",
 }
 
 PRIMARY_BUTTON_STYLE = {
@@ -77,15 +83,36 @@ def default_date_range() -> tuple[str, str]:
     return f"{year}-01-01", f"{year}-12-31"
 
 
+# Plotly's default modebar is built for mouse interaction. On touch devices it
+# never appears via hover anyway, so hiding it by default (it still shows on
+# desktop hover) reclaims vertical space without losing functionality there.
+_GRAPH_CONFIG = {
+    "displayModeBar": "hover",
+    "displaylogo": False,
+    "responsive": True,
+    "scrollZoom": False,
+}
+
+
+def _graph(graph_id: str) -> dcc.Graph:
+    """A dcc.Graph with the shared mobile-friendly config applied."""
+    return dcc.Graph(id=graph_id, config=_GRAPH_CONFIG, style={"height": "100%"})
+
+
 def _icon_button(icon_class: str, button_id: str, tooltip: str) -> html.Span:
-    """Icon button with a tooltip, so the icon-only toolbar stays discoverable."""
+    """Icon button with a tooltip, so the icon-only toolbar stays discoverable.
+
+    Sized to at least 44x44px, the minimum touch target recommended by WCAG
+    2.5.5 and by both Apple's and Google's platform guidelines, so the button
+    is reliably tappable on a phone rather than just clickable with a mouse.
+    """
     return html.Span(
         [
             dbc.Button(
                 html.I(className=icon_class),
                 id=button_id,
                 className="me-2",
-                style=ICON_BUTTON_STYLE,
+                style={**ICON_BUTTON_STYLE, "minWidth": "44px", "minHeight": "44px"},
             ),
             dbc.Tooltip(tooltip, target=button_id, placement="bottom"),
         ]
@@ -278,6 +305,77 @@ def _new_record_modal() -> dbc.Modal:
     )
 
 
+PAYMENT_METHOD_TABLE_COLUMNS = [
+    {"name": "Name", "id": "Name", "editable": True},
+    {"name": "Close Date", "id": "Close Date", "editable": True, "type": "numeric"},
+    {"name": "Payment Date", "id": "Payment Date", "editable": True, "type": "numeric"},
+    {"name": "Type", "id": "Type", "editable": True, "presentation": "dropdown"},
+]
+
+PAYMENT_METHOD_TYPE_OPTIONS = [
+    {"label": "Credit", "value": "Credit"},
+    {"label": "Debit", "value": "Debit"},
+]
+
+
+CATEGORY_TABLE_COLUMNS = [{"name": "Name", "id": "Name", "editable": True}]
+
+
+def _categories_modal() -> dbc.Modal:
+    """Modal for creating, renaming, and deleting categories."""
+    return dbc.Modal(
+        [
+            dbc.ModalHeader("Manage Categories", style=MODAL_HEADER_STYLE),
+            dbc.ModalBody(
+                [
+                    dbc.Alert(
+                        "Categories used by existing records are not renamed "
+                        "automatically here — this only edits the selectable list.",
+                        color="secondary",
+                        className="py-2",
+                        style={"fontSize": config.fontsize_1},
+                    ),
+                    dash_table.DataTable(
+                        id="table-categories",
+                        columns=CATEGORY_TABLE_COLUMNS,
+                        data=load_categories().to_dict("records"),
+                        editable=True,
+                        row_deletable=True,
+                        style_table={"overflowX": "auto"},
+                        style_header={
+                            "backgroundColor": config.blue_2,
+                            "color": "white",
+                            "fontWeight": "bold",
+                        },
+                        style_cell={
+                            "backgroundColor": "white",
+                            "color": "black",
+                            "textAlign": "center",
+                        },
+                    ),
+                    html.Div(id="categories-feedback", className="mt-2"),
+                    dbc.Button(
+                        "Add row",
+                        id="btn-add-category",
+                        className="mt-2 float-end",
+                        style={**ICON_BUTTON_STYLE, "color": "white"},
+                    ),
+                ],
+                style={"backgroundColor": config.gray_1, "padding": "30px"},
+            ),
+            dbc.ModalFooter(
+                [
+                    dbc.Button("Save", id="btn-save-categories", style=PRIMARY_BUTTON_STYLE),
+                    dbc.Button("Close", id="btn-close-categories", style=SECONDARY_BUTTON_STYLE),
+                ],
+                style={"backgroundColor": config.gray_1},
+            ),
+        ],
+        id="modal-categories",
+        is_open=False,
+    )
+
+
 def _payment_methods_modal() -> dbc.Modal:
     """Modal for editing the payment-method table in place."""
     return dbc.Modal(
@@ -295,35 +393,8 @@ def _payment_methods_modal() -> dbc.Modal:
                     ),
                     dash_table.DataTable(
                         id="table-payment-methods",
-                        columns=[
-                            {"name": "Name", "id": "Name", "editable": True},
-                            {
-                                "name": "Close Date",
-                                "id": "Close Date",
-                                "editable": True,
-                                "type": "numeric",
-                            },
-                            {
-                                "name": "Payment Date",
-                                "id": "Payment Date",
-                                "editable": True,
-                                "type": "numeric",
-                            },
-                            {
-                                "name": "Type",
-                                "id": "Type",
-                                "editable": True,
-                                "presentation": "dropdown",
-                            },
-                        ],
-                        dropdown={
-                            "Type": {
-                                "options": [
-                                    {"label": "Credit", "value": "Credit"},
-                                    {"label": "Debit", "value": "Debit"},
-                                ]
-                            }
-                        },
+                        columns=PAYMENT_METHOD_TABLE_COLUMNS,
+                        dropdown={"Type": {"options": PAYMENT_METHOD_TYPE_OPTIONS}},
                         data=load_payment_methods().to_dict("records"),
                         editable=True,
                         row_deletable=True,
@@ -375,15 +446,15 @@ def _charts() -> list[dbc.Row]:
     rows = [
         dbc.Row(
             [
-                dbc.Col(dcc.Graph(id=left), xs=12, lg=6, className="mb-3"),
-                dbc.Col(dcc.Graph(id=right), xs=12, lg=6, className="mb-3"),
+                dbc.Col(_graph(left), xs=12, lg=6, className="mb-3"),
+                dbc.Col(_graph(right), xs=12, lg=6, className="mb-3"),
             ],
             className="mb-2",
         )
         for left, right in pairs
     ]
     rows.append(
-        dbc.Row([dbc.Col(dcc.Graph(id="fig-cumulative"), width=12)], className="mb-4")
+        dbc.Row([dbc.Col(_graph("fig-cumulative"), width=12)], className="mb-4")
     )
     return rows
 
@@ -432,6 +503,14 @@ def build_layout() -> html.Div:
                                 width="auto",
                             ),
                             dbc.Col(
+                                _icon_button(
+                                    "fa-solid fa-tags",
+                                    "open-categories-modal",
+                                    "Manage categories",
+                                ),
+                                width="auto",
+                            ),
+                            dbc.Col(
                                 _icon_button("fa fa-plus", "open-modal", "Add a new record"),
                                 width="auto",
                             ),
@@ -449,6 +528,7 @@ def build_layout() -> html.Div:
                     ),
                     _new_record_modal(),
                     _payment_methods_modal(),
+                    _categories_modal(),
                     *_charts(),
                     dbc.Row(
                         [
@@ -479,7 +559,15 @@ def build_layout() -> html.Div:
                                 columns=[{"name": c, "id": c} for c in TABLE_COLUMNS],
                                 data=[],
                                 page_size=20,
-                                style_table={"overflowX": "auto"},
+                                style_table={
+                                    "overflowX": "auto",
+                                    "minWidth": "100%",
+                                    "WebkitOverflowScrolling": "touch",
+                                },
+                                # Keeps the date column visible while scrolling
+                                # horizontally on a narrow screen, so a row stays
+                                # identifiable even once the rest has scrolled off.
+                                fixed_columns={"headers": True, "data": 1},
                                 style_header={
                                     "backgroundColor": config.blue_2,
                                     "color": config.blue_1,

@@ -180,6 +180,16 @@ def get_categories() -> list[str]:
     return sorted(df["Name"].dropna().astype(str).tolist())
 
 
+def save_categories(df: pd.DataFrame) -> None:
+    """Persist categories, dropping blanks and de-duplicating case-sensitively."""
+    cleaned = df.reindex(columns=CATEGORY_COLUMNS).copy()
+    cleaned["Name"] = cleaned["Name"].astype(str).str.strip()
+    cleaned = cleaned[cleaned["Name"].ne("") & cleaned["Name"].ne("nan")]
+    cleaned = cleaned.drop_duplicates(subset=["Name"]).sort_values("Name")
+    with _WRITE_LOCK:
+        _write_atomic(cleaned, config.categories_db)
+
+
 # -----------------------------------------------------------------------------
 # Payment methods
 # -----------------------------------------------------------------------------
