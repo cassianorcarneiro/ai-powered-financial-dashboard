@@ -34,8 +34,8 @@ ICON_BUTTON_STYLE = {
 }
 
 PRIMARY_BUTTON_STYLE = {
-    "backgroundColor": config.accent,
-    "borderColor": config.accent,
+    "backgroundColor": config.action,
+    "borderColor": config.action,
     "color": "white",
     "fontSize": config.fontsize_1,
 }
@@ -356,7 +356,7 @@ def _new_record_modal() -> dbc.Modal:
             ),
             dbc.ModalFooter(
                 [
-                    dbc.Button("Insert", id="btn-save", style=PRIMARY_BUTTON_STYLE),
+                    dbc.Button("Save", id="btn-save", style=PRIMARY_BUTTON_STYLE),
                     dbc.Button("Cancel", id="btn-close", style=SECONDARY_BUTTON_STYLE),
                 ],
                 style={
@@ -516,7 +516,10 @@ def _editor_modal(
     return dbc.Modal(
         [
             dbc.ModalHeader(title, style=MODAL_HEADER_STYLE),
-            dbc.ModalBody(body, style={"backgroundColor": config.surface, "padding": "24px"}),
+            # Shares MODAL_BODY_STYLE with the New Record dialog so both carry the
+            # same text colour; building the style inline here left the column
+            # headings inheriting Bootstrap's dark default against a dark surface.
+            dbc.ModalBody(body, style={**MODAL_BODY_STYLE, "padding": "24px"}),
             dbc.ModalFooter(
                 [
                     dbc.Button("Save", id=save_button_id, style=PRIMARY_BUTTON_STYLE),
@@ -534,14 +537,19 @@ def _editor_modal(
     )
 
 
+def _column_heading(text: str) -> html.Small:
+    """Column label for the row editors, matched to dbc.Label's weight."""
+    return html.Small(text, style={"color": config.text, "fontWeight": "600"})
+
+
 def _payment_methods_modal() -> dbc.Modal:
     """Modal for creating, editing and removing payment methods."""
     header = dbc.Row(
         [
-            dbc.Col(html.Small("Name"), xs=12, md=4),
-            dbc.Col(html.Small("Type"), xs=12, md=3),
-            dbc.Col(html.Small("Close day"), xs=6, md=2),
-            dbc.Col(html.Small("Pay day"), xs=6, md=2),
+            dbc.Col(_column_heading("Name"), xs=12, md=4),
+            dbc.Col(_column_heading("Type"), xs=12, md=3),
+            dbc.Col(_column_heading("Close day"), xs=6, md=2),
+            dbc.Col(_column_heading("Pay day"), xs=6, md=2),
             dbc.Col(width=1),
         ],
         className="g-2 d-none d-md-flex fw-bold",

@@ -100,7 +100,11 @@ class Config:
     border: str = "#444444"         # panel edges, chart gridlines
     text: str = "#E6E6E6"           # primary text on dark surfaces
     text_muted: str = "#8A8A8A"     # secondary text, placeholders
-    accent: str = "#37C3F7"         # headings, primary actions, key series
+    accent: str = "#37C3F7"         # headings and key chart series
+    # A deeper blue for filled buttons. The accent above is too light to carry
+    # white text: it measures about 2:1, well under the 4.5:1 needed for body
+    # text, so the label washes into the fill. This shade reaches 5.1:1.
+    action: str = "#1773B0"
 
     # Panels (charts, cards, the table) share one outline so they read as the
     # same kind of surface. Defined once here; assets/theme.css repeats the
