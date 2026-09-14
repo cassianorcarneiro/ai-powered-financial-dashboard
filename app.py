@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import uuid
 from datetime import datetime
 from typing import Any
@@ -23,10 +24,12 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import Dash, Input, Output, State, callback_context, html, no_update
 from dateutil.relativedelta import relativedelta
+from flask import has_request_context, session
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import charts
 import layout as ui
+import security
 from config import DATE_FORMAT, TIMESTAMP_FORMAT, Config as config
 from insights import get_insight
 from metrics import compute_window_metrics, parse_installment
@@ -291,8 +294,36 @@ app = Dash(
     title="Financial Control",
     update_title=None,
 )
-app.layout = ui.build_layout
+def serve_layout() -> html.Div:
+    """Chooses the lock gate or the real dashboard for this page load.
+
+    Runs on the server for every full page load (Dash calls a callable
+    `app.layout` fresh each time), with access to the Flask session tied to
+    the request. That is what makes the gate real rather than cosmetic: when
+    it applies, the dashboard's own components — the ones the data flows
+    through — are simply never constructed for this response.
+
+    Dash also calls this function once at startup, outside any HTTP request,
+    to validate the layout against the registered callbacks. `flask.session`
+    does not exist yet at that point, so reading it raises RuntimeError. The
+    `has_request_context()` check below covers exactly that call: with no
+    request in flight there is no session to check, and no data is being sent
+    to anyone, so it is safe to render the real layout for validation purposes.
+    """
+    locked = security.is_enabled() and has_request_context() and not session.get("unlocked")
+    return ui.build_lock_gate() if locked else ui.build_layout()
+
+
+app.layout = serve_layout
 server = app.server  # WSGI entry point used by gunicorn
+
+# Required for Flask's signed session cookie, which is how "unlocked" survives
+# from one page load to the next. Generated fresh per process rather than
+# persisted to disk: the password itself survives a restart (it's on disk via
+# security.py), but an already-unlocked session does not, which is the
+# reasonable default for a privacy speed bump — nothing to leak if the key
+# were ever read off the container.
+server.secret_key = secrets.token_hex(32)
 
 # Dash's default template already inserts assets/favicon.ico via {%favicon%},
 # so the browser tab icon needs no extra markup. These three tags cover what
@@ -341,7 +372,105 @@ def healthz():
 
 
 # -----------------------------------------------------------------------------
-# Callbacks: filters
+# Callbacks: privacy lock
+# -----------------------------------------------------------------------------
+
+@app.callback(
+    Output("lock-redirect", "href"),
+    Output("lock-gate-error", "children"),
+    Input("lock-submit-btn", "n_clicks"),
+    Input("lock-password-input", "n_submit"),  # fires on Enter in the field
+    State("lock-password-input", "value"),
+    prevent_initial_call=True,
+)
+def unlock_dashboard(_n_clicks, _n_submit, password):
+    """Verify the password and, on success, force a real page reload.
+
+    The reload matters: `session["unlocked"]` only takes effect for
+    serve_layout() on the *next* full page load, not the current one, so a
+    client-side-only update would leave the gate showing despite success.
+    """
+    if security.check_password(password or ""):
+        session["unlocked"] = True
+        return "/", None
+    return no_update, alert("Incorrect password.")
+
+
+@app.callback(
+    Output("lock-toggle-col", "children"),
+    Output("lock-toggle-feedback", "children"),
+    Input("toggle-lock-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def toggle_lock(_n_clicks):
+    """Flip the lock for future page loads; the current tab is unaffected.
+
+    Turning the lock on with no password set would lock the dashboard behind a
+    password nobody has typed yet, so that combination is refused with a
+    message pointing at the password button instead.
+    """
+    currently_on = security.is_enabled()
+
+    if not currently_on and not security.has_password():
+        icon = ui._icon_button(
+            "fa-solid fa-lock-open", "toggle-lock-btn", "Lock the dashboard on future visits"
+        )
+        return icon, alert(
+            "Set a password first, using the key button.", color="warning"
+        )
+
+    security.set_enabled(not currently_on)
+    now_on = not currently_on
+    icon = ui._icon_button(
+        "fa-solid fa-lock" if now_on else "fa-solid fa-lock-open",
+        "toggle-lock-btn",
+        "Lock the dashboard on future visits",
+    )
+    message = (
+        "Lock enabled. The password will be requested the next time this page loads."
+        if now_on
+        else "Lock disabled."
+    )
+    return icon, alert(message, color="success")
+
+
+@app.callback(
+    Output("modal-lock-password", "is_open"),
+    Output("lock-password-feedback", "children"),
+    Output("lock-current-password", "value"),
+    Output("lock-new-password", "value"),
+    Output("lock-confirm-password", "value"),
+    Input("open-lock-password-modal", "n_clicks"),
+    Input("btn-close-lock-password", "n_clicks"),
+    Input("btn-save-lock-password", "n_clicks"),
+    State("modal-lock-password", "is_open"),
+    State("lock-current-password", "value"),
+    State("lock-new-password", "value"),
+    State("lock-confirm-password", "value"),
+    prevent_initial_call=True,
+)
+def manage_lock_password(_open, _close, _save, is_open, current_pw, new_pw, confirm_pw):
+    """Open, close, or persist a change to the lock password.
+
+    Requires the existing password to change it, except the very first time
+    one is set, when there is nothing yet to check against.
+    """
+    if callback_context.triggered_id == "btn-save-lock-password":
+        if security.has_password() and not security.check_password(current_pw or ""):
+            return True, alert("Current password is incorrect."), no_update, no_update, no_update
+        if not new_pw:
+            return True, alert("Enter a new password."), no_update, no_update, no_update
+        if new_pw != confirm_pw:
+            return True, alert("New passwords do not match."), no_update, no_update, no_update
+
+        security.set_password(new_pw)
+        logger.info("Dashboard lock password changed.")
+        return False, None, "", "", ""
+
+    return (not is_open), None, "", "", ""
+
+
+
 # -----------------------------------------------------------------------------
 
 @app.callback(

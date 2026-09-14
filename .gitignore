@@ -3,7 +3,10 @@
 
 # Financial data — never commit personal transaction history
 data/*.csv
-!data/.gitkeep
+!data/*.example.csv
+
+# Dashboard lock state — contains a salted password hash
+data/lock.json
 
 # Python artifacts
 __pycache__/

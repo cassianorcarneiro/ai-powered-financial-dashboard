@@ -14,6 +14,7 @@ import pandas as pd
 from dash import dash_table, dcc, html
 
 from config import Config as config
+import security
 from storage import (
     get_categories,
     get_payment_methods,
@@ -613,6 +614,138 @@ def _charts() -> list[dbc.Row]:
     return rows
 
 
+def _lock_icon_class() -> str:
+    """Padlock icon reflecting the current on-disk lock state at page load.
+
+    A callback keeps this in sync after the button is clicked without a full
+    reload; this only decides what a *fresh* page load starts from.
+    """
+    return "fa-solid fa-lock" if security.is_enabled() else "fa-solid fa-lock-open"
+
+
+def build_lock_gate() -> html.Div:
+    """Standalone screen shown instead of the dashboard while it is locked.
+
+    Deliberately contains none of the dashboard's own components: nothing here
+    can leak financial data, because the components that render it — the
+    charts, the table — are not part of this tree at all.
+    """
+    return html.Div(
+        dbc.Container(
+            dbc.Row(
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody(
+                            [
+                                html.Div(
+                                    html.I(className="fa-solid fa-lock"),
+                                    className="text-center mb-3",
+                                    style={"fontSize": "2.5rem", "color": config.accent},
+                                ),
+                                html.H4(
+                                    "Dashboard Locked",
+                                    className="text-center mb-3",
+                                    style={"color": config.text},
+                                ),
+                                dbc.Input(
+                                    id="lock-password-input",
+                                    type="password",
+                                    placeholder="Password",
+                                    autoFocus=True,
+                                    className="mb-2",
+                                ),
+                                html.Div(id="lock-gate-error"),
+                                dbc.Button(
+                                    "Unlock",
+                                    id="lock-submit-btn",
+                                    style={**PRIMARY_BUTTON_STYLE, "width": "100%"},
+                                    className="mt-2",
+                                ),
+                                # `refresh=True`: a full page reload, not the
+                                # client-side routing dcc.Location normally
+                                # does. The gate/dashboard choice is made by
+                                # build_layout() on the server for each fresh
+                                # load, so unlocking has to trigger a real
+                                # reload for the server to re-evaluate it.
+                                dcc.Location(id="lock-redirect", refresh=True),
+                            ]
+                        ),
+                        style={**CARD_BODY_STYLE, "maxWidth": "360px"},
+                    ),
+                    width="auto",
+                ),
+                justify="center",
+                className="mt-5",
+            ),
+            fluid=True,
+        ),
+        style={"backgroundColor": config.bg, "minHeight": "100vh", "paddingTop": "10vh"},
+    )
+
+
+def _lock_password_modal() -> dbc.Modal:
+    """Modal for setting or changing the lock password.
+
+    Separate from the toolbar toggle by design: this manages what the password
+    *is*, the padlock button manages whether it's *required*. Combining them
+    would mean re-entering a password just to turn the lock off.
+    """
+    return dbc.Modal(
+        [
+            dbc.ModalHeader("Dashboard Lock Password", style=MODAL_HEADER_STYLE),
+            dbc.ModalBody(
+                [
+                    dbc.Alert(
+                        "This is a privacy lock, not account security: it keeps "
+                        "the dashboard from opening casually on a shared device. "
+                        "Leave \"Current password\" empty the first time you set one.",
+                        color="secondary",
+                        className="py-2",
+                        style={"fontSize": config.fontsize_1},
+                    ),
+                    dbc.Label("Current password"),
+                    dbc.Input(
+                        id="lock-current-password",
+                        type="password",
+                        className="mb-3",
+                    ),
+                    dbc.Label("New password"),
+                    dbc.Input(id="lock-new-password", type="password", className="mb-3"),
+                    dbc.Label("Confirm new password"),
+                    dbc.Input(
+                        id="lock-confirm-password", type="password", className="mb-3"
+                    ),
+                    html.Div(id="lock-password-feedback"),
+                ],
+                style=MODAL_BODY_STYLE,
+            ),
+            dbc.ModalFooter(
+                [
+                    dbc.Button(
+                        "Save", id="btn-save-lock-password", style=PRIMARY_BUTTON_STYLE
+                    ),
+                    dbc.Button(
+                        "Close",
+                        id="btn-close-lock-password",
+                        style={
+                            "backgroundColor": config.surface_raised,
+                            "borderColor": config.surface_raised,
+                            "color": "white",
+                            "fontSize": config.fontsize_1,
+                        },
+                    ),
+                ],
+                style={
+                    "backgroundColor": config.surface_raised,
+                    "borderTop": f"1px solid {config.border}",
+                },
+            ),
+        ],
+        id="modal-lock-password",
+        is_open=False,
+    )
+
+
 def build_layout() -> html.Div:
     """Assemble the full page."""
     start_date, end_date = default_date_range()
@@ -669,6 +802,25 @@ def build_layout() -> html.Div:
                                 width="auto",
                             ),
                             dbc.Col(
+                                _icon_button(
+                                    "fa-solid fa-key",
+                                    "open-lock-password-modal",
+                                    "Set or change the dashboard password",
+                                ),
+                                width="auto",
+                            ),
+                            dbc.Col(
+                                [
+                                    _icon_button(
+                                        _lock_icon_class(),
+                                        "toggle-lock-btn",
+                                        "Lock the dashboard on future visits",
+                                    ),
+                                ],
+                                id="lock-toggle-col",
+                                width="auto",
+                            ),
+                            dbc.Col(
                                 dbc.Button(
                                     "Generate AI Insight",
                                     id="update-ai-comment-btn",
@@ -677,12 +829,14 @@ def build_layout() -> html.Div:
                                 ),
                                 width="auto",
                             ),
+                            dbc.Col(html.Div(id="lock-toggle-feedback"), width="auto"),
                         ],
                         className="my-4 g-2",
                     ),
                     _new_record_modal(),
                     _payment_methods_modal(),
                     _categories_modal(),
+                    _lock_password_modal(),
                     *_charts(),
                     dbc.Row(
                         [
