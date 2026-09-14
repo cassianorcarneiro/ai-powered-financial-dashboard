@@ -103,7 +103,15 @@ def empty_figure(message: str = "No data available") -> go.Figure:
 
 
 def _apply_common_layout(fig: go.Figure) -> go.Figure:
-    """Apply the shared dark-panel styling."""
+    """Apply the shared dark-panel styling.
+
+    `margin.t` (90px, not a tighter default) is the space reserved for the
+    title on every chart. Pie charts need the extra room specifically: an
+    outside label near the top of the circle can rise well above the pie's
+    own bounding box, and a narrow margin lets it collide with the title
+    text sitting in that same band. Applied to every chart rather than only
+    pie ones so the title's reserved space is consistent across the page.
+    """
     fig.update_layout(
         height=FIGURE_HEIGHT,
         autosize=True,
@@ -111,10 +119,11 @@ def _apply_common_layout(fig: go.Figure) -> go.Figure:
         dragmode=False,
         plot_bgcolor=config.surface,
         paper_bgcolor=config.surface,
+        title=dict(y=0.97, yanchor="top", pad=dict(b=10)),
         title_font_color=config.text,
         font_color=config.text,
         font_size=config.chart_fontsize_1,
-        margin=dict(t=60, b=50, l=50, r=30),
+        margin=dict(t=90, b=50, l=50, r=30),
     )
     return fig
 
@@ -199,10 +208,18 @@ def share_pie(df: pd.DataFrame, group_column: str, title: str) -> go.Figure:
     fig.update_traces(
         textposition="outside",
         textinfo="percent+label",
-        # Reserves whatever space the outside labels need instead of letting
-        # them clip against the fixed-size container; Plotly draws the
-        # connecting line to each slice automatically once labels sit outside.
-        automargin=True,
+        # automargin lets Plotly recompute the pie's own domain at render time
+        # to fit outside labels — which was overriding the fixed domain below
+        # and letting labels rise back into the title's margin regardless of
+        # what was reserved for it. Turning it off makes the geometry fully
+        # deterministic: the domain and margin set here are exactly what
+        # renders, with no runtime recalculation to second-guess.
+        automargin=False,
+        # The pie itself is deliberately smaller than its plot area (both x
+        # and y pulled in from the edges), so a label rising above or past the
+        # circle's own edge still lands inside empty space rather than in the
+        # title band or clipped against the figure's border.
+        domain=dict(x=[0.08, 0.92], y=[0.04, 0.78]),
         hovertemplate=f"%{{label}}<br>{config.currency_symbol} %{{value:.2f}}<extra></extra>",
     )
     return _apply_common_layout(fig)
