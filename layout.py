@@ -91,12 +91,6 @@ def default_date_range() -> tuple[str, str]:
 # Plotly's default modebar is built for mouse interaction. On touch devices it
 # never appears via hover anyway, so hiding it by default (it still shows on
 # desktop hover) reclaims vertical space without losing functionality there.
-#
-# "responsive" is deliberately absent. It makes Plotly derive the plot height
-# from its container, and the dbc.Col around each graph is auto-sized, so the
-# height stays indeterminate: on a callback-driven re-render Plotly could settle
-# on a taller box than the row reserves and spill over the content below it.
-# charts.py sets an explicit pixel height instead, which is deterministic.
 _GRAPH_CONFIG = {
     "displayModeBar": "hover",
     "displaylogo": False,
@@ -118,13 +112,12 @@ _GRAPH_CONFIG = {
 def _graph(graph_id: str) -> dcc.Graph:
     """A dcc.Graph with the shared mobile-friendly config applied.
 
-    No height is set here on purpose. A percentage height only resolves against
-    a parent with a definite height, and the dbc.Col wrapping each graph is
-    auto-sized, so `height: 100%` leaves the container indeterminate. Plotly
-    then re-measures it on every callback-driven re-render and can settle on a
-    height that no longer matches the space the column reserves, which is what
-    made the table overlap the charts after a delete. Plotly's own default
-    height applies instead, and `responsive` keeps it adapting to width.
+    No height is set here: the authoritative value is `charts.py`'s
+    `FIGURE_HEIGHT`, set explicitly on every figure's own layout with
+    `autosize` off, so nothing derived from this component's container can
+    override it. Width still needs to track the container as it resizes;
+    `assets/chart-resize.js` handles that via `Plotly.relayout` with an
+    explicit `width` only, which leaves height alone.
     """
     return dcc.Graph(id=graph_id, config=_GRAPH_CONFIG)
 

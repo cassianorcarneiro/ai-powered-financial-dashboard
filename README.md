@@ -22,6 +22,7 @@ A Python-based personal finance dashboard that turns CSV-stored transactions int
 - 💾 **Persistent data** — your CSVs live on the host filesystem, untouched by container restarts
 - 🛟 **Graceful degradation** — when the model is unavailable or out of memory, a deterministic summary is shown instead of an error
 - 📱 **Usable on a phone** — charts stack to a single column, controls meet minimum touch-target sizes, and the app can be added to the home screen with its own icon
+- 🔐 **Optional privacy lock** — a password screen for the dashboard itself, independent of network-level auth; see [Privacy and security](#-privacy-and-security)
 
 ---
 
@@ -196,6 +197,7 @@ All runtime configuration is done through environment variables, exposed via `.e
 | `OLLAMA_TIMEOUT` | `120` | Seconds to wait for a completion |
 | `TZ` | `UTC` | Timezone for the "last update" timestamp |
 | `CURRENCY` | `BRL` | Currency label passed to the model |
+| `CURRENCY_SYMBOL` | `R$` | Symbol shown on chart axes and tooltips |
 | `REQUEST_PASSWORD` | `0` | Set to `1` to require basic authentication |
 | `DASHBOARD_USERS` | *(empty)* | `user:password` pairs, comma-separated |
 | `LOG_LEVEL` | `INFO` | Python logging level |
@@ -363,6 +365,7 @@ for this step; it is not a dependency of the running app.
 ├── storage.py              # Atomic CSV reads/writes, bootstrap, validation
 ├── metrics.py              # Trailing 12-month aggregations
 ├── insights.py             # Ollama client, prompt, fallback summary
+├── security.py             # Privacy lock: password hashing, on/off state
 ├── charts.py               # Plotly figure factory
 ├── layout.py               # Dash component tree
 ├── assets/                 # Served automatically by Dash
@@ -402,6 +405,19 @@ This project is designed to keep your financial data on your machine:
 - ✅ The container runs as an unprivileged user
 - ⚠️ The first run **does** require internet to pull the Docker image and the LLM model
 - ⚠️ Basic authentication transmits credentials in clear text. Enable it only behind TLS or on a trusted network such as a private VPN, and never commit real credentials
+
+### Privacy lock vs. Basic Auth
+
+Two independent layers exist, solving different problems:
+
+| | Basic Auth (`REQUEST_PASSWORD`) | Privacy lock (in-app) |
+|---|---|---|
+| Purpose | Keep the dashboard off the network for anyone without the password | Keep it from opening casually on a device you already have unlocked |
+| Set via | `.env`, before the container starts | The key and padlock buttons, from inside the running dashboard |
+| Checked | Before Dash serves anything | Server-side, per page load, via a Flask session |
+| Threat model | Someone reaching the dashboard over the network | Someone with physical access to an already-unlocked phone or laptop |
+
+The privacy lock stores a salted password hash in `data/lock.json` (gitignored, never committed) and is not designed to resist someone willing to inspect the server or its files. Turning the lock on takes effect the next time the page loads, not the current session; an already-open tab keeps working until it is closed or reloaded. The unlocked state does not survive a container restart, by design — the password itself does.
 
 After the initial setup, you can disconnect from the internet and the dashboard will keep working.
 

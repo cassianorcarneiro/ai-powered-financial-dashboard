@@ -100,6 +100,42 @@
     // Everything else (Tab, arrows, Enter, shortcuts) is left alone.
   }
 
+  function onAmountPaste(event) {
+    var input = event.target;
+    if (!input || input.id !== AMOUNT_ID) return;
+    event.preventDefault();
+
+    var pasted = (event.clipboardData || window.clipboardData).getData("text");
+    var trimmed = pasted.trim();
+    var negative = trimmed.charAt(0) === "-";
+
+    // Parsed as an actual decimal value, not stripped-to-digits like typed
+    // input: pasting "123" should mean 123.00, not read as three keystrokes
+    // that would land as 1.23 under the right-to-left typing model. A comma is
+    // accepted as the decimal mark only when there is no "." already, mirroring
+    // parse_amount's tolerance server-side so client and server agree on what
+    // a given pasted string means.
+    var normalized = trimmed.replace(/^[+-]/, "").replace(/\s/g, "");
+    if ((normalized.match(/,/g) || []).length === 1 && normalized.indexOf(".") === -1) {
+      normalized = normalized.replace(",", ".");
+    }
+
+    // Validated as a whole string, not just parsed with parseFloat: parseFloat
+    // stops at the first character it can't read rather than rejecting the
+    // input, so "1,234.56" would silently become 1 instead of being refused.
+    // A thousands separator is out of scope here for the same reason it is
+    // server-side (parse_amount in app.py): the same character reads as a
+    // decimal mark in much of the world, so accepting it would be ambiguous
+    // rather than convenient.
+    if (!/^\d+(\.\d+)?$/.test(normalized)) return;
+
+    var value = parseFloat(normalized);
+    if (!isFinite(value)) return;
+
+    var cents = Math.round(Math.abs(value) * 100).toString();
+    setValue(input, formatAmount(cents, negative), true);
+  }
+
   function onAmountBlur(event) {
     var input = event.target;
     if (!input || input.id !== AMOUNT_ID) return;
@@ -143,6 +179,7 @@
      ------------------------------------------------------------------------ */
 
   document.addEventListener("keydown", onAmountKeydown, true);
+  document.addEventListener("paste", onAmountPaste, true);
   document.addEventListener("blur", onAmountBlur, true);
   document.addEventListener("input", onDateInput, true);
 })();

@@ -1,4 +1,8 @@
 dash>=3.0,<4
+# Imported directly in app.py (session, has_request_context) for the privacy
+# lock. Already a transitive dependency of dash, but declared explicitly since
+# the code depends on its API surface directly, not just through Dash.
+flask>=3.0,<4
 dash-bootstrap-components>=1.6,<3
 dash-auth>=2.3,<3
 plotly>=5.22,<7
