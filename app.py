@@ -293,6 +293,19 @@ app = Dash(
     external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME],
     title="Financial Control",
     update_title=None,
+    # Required because of the privacy lock: unlock_dashboard's callback
+    # references lock-redirect/lock-gate-error, which only exist in the gate
+    # layout (ui.build_lock_gate), and manage_lock_password/toggle_lock
+    # reference toolbar ids that only exist in the dashboard layout
+    # (ui.build_layout). The two never render together — serve_layout()
+    # picks exactly one per request — but every @app.callback runs
+    # unconditionally at import time, so Dash's default validation checks all
+    # of them against whichever layout happens to be current and warns about
+    # the other set. This is the standard, Dash-documented setting for an app
+    # with more than one top-level layout; it does mean a genuine typo'd
+    # component id elsewhere would no longer be caught by that validation, so
+    # id wiring is instead checked directly in this project's test suite.
+    suppress_callback_exceptions=True,
 )
 def serve_layout() -> html.Div:
     """Chooses the lock gate or the real dashboard for this page load.
