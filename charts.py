@@ -59,7 +59,14 @@ _AXIS_Y = dict(
     zerolinecolor=config.border,
     zerolinewidth=3.0,
     fixedrange=True,
+    tickprefix=f"{config.currency_symbol} ",
+    tickformat=".2f",
 )
+
+# Bar hover text is set explicitly rather than left to Plotly's default, which
+# would read "Amount=1234.56" or "Cumulative=1234.56" depending on which column
+# feeds the y-axis. The literal symbol keeps it independent of that column name.
+_BAR_HOVERTEMPLATE = "%{x}<br>" + config.currency_symbol + " %{y:.2f}<extra></extra>"
 
 
 def pastel_colors(n: int) -> list[str]:
@@ -164,10 +171,11 @@ def monthly_bar(
     )
     fig.update_layout(
         xaxis_title="Month/Year",
-        yaxis_title="Amount",
+        yaxis_title=f"Amount ({config.currency_symbol})",
         xaxis=_AXIS_X,
         yaxis=_AXIS_Y,
     )
+    fig.update_traces(hovertemplate=_BAR_HOVERTEMPLATE)
     return _apply_common_layout(fig)
 
 
@@ -188,5 +196,13 @@ def share_pie(df: pd.DataFrame, group_column: str, title: str) -> go.Figure:
         title=title,
         color_discrete_sequence=pastel_colors(len(grouped)),
     )
-    fig.update_traces(textposition="inside", textinfo="percent+label")
+    fig.update_traces(
+        textposition="outside",
+        textinfo="percent+label",
+        # Reserves whatever space the outside labels need instead of letting
+        # them clip against the fixed-size container; Plotly draws the
+        # connecting line to each slice automatically once labels sit outside.
+        automargin=True,
+        hovertemplate=f"%{{label}}<br>{config.currency_symbol} %{{value:.2f}}<extra></extra>",
+    )
     return _apply_common_layout(fig)

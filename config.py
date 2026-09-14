@@ -72,6 +72,11 @@ class Config:
     timezone: str = os.getenv("TZ", "UTC")
     # Free-form label used in the AI prompt so the model names amounts correctly.
     currency: str = os.getenv("CURRENCY", "BRL")
+    # Symbol shown on charts. Separate from `currency` above (a code the AI
+    # prompt reads) because the two serve different audiences: the model reads
+    # a code, the chart axis needs a printable symbol, and the two don't always
+    # match ("R$" for BRL, "$" for USD is ambiguous with CAD/AUD/etc.).
+    currency_symbol: str = os.getenv("CURRENCY_SYMBOL", "R$")
 
     # ----- Server -----
     host: str = os.getenv("DASH_HOST", "0.0.0.0")
