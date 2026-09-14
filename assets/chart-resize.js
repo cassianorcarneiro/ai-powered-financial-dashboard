@@ -1,27 +1,47 @@
 /* =============================================================================
    AI POWERED FINANCIAL DASHBOARD
-   Keeps each chart's width matched to its container, without touching height.
+   Keeps each chart sized correctly: width matched to its container, height
+   corrected back to the fixed value charts.py uses whenever it comes out wrong.
 
-   Earlier version of this file called Plotly.Plots.resize(gd), which measures
-   the container and can recompute BOTH width and height from it. Direct
-   measurement showed that recomputation returning height 0 for bar charts
-   (Cartesian: x/y axes) while leaving pie charts (no axes) correctly sized,
-   even though every figure sets an explicit `height` in charts.py. autosize is
-   now off in charts.py so nothing else can touch height either; this file
-   calls Plotly.relayout with only a `width` key, which changes exclusively
-   that property and leaves layout.height untouched.
+   Measurement (via the browser console, not guessed) showed that Cartesian
+   charts (bar: x/y axes) can render with a computed height of 0 on the very
+   first paint, before any JS in this file runs — while pie charts (no axes)
+   render correctly every time. This happens with `autosize` off and no
+   Plotly.Plots.resize() call anywhere, so it isn't something a resize handler
+   is causing; whatever produces it happens inside Plotly's own first render
+   for a Cartesian subplot. Rather than prevent that first-paint state (not
+   fully understood), this corrects it: any chart found at height 0 is
+   explicitly relaid out back to the known-correct height.
+
+   FIGURE_HEIGHT below must match charts.py's constant of the same name.
    ============================================================================= */
 
 (function () {
   "use strict";
 
-  function syncWidths() {
+  var FIGURE_HEIGHT = 400;
+
+  function syncSizes() {
     document.querySelectorAll(".js-plotly-plot").forEach(function (gd) {
       if (!window.Plotly || !gd.data || !gd.parentElement) return;
+
       var width = gd.parentElement.clientWidth;
+      var update = {};
+
       if (width > 0 && width !== gd._fullLayout?.width) {
+        update.width = width;
+      }
+      // The actual bug this file exists for: a Cartesian chart's rendered
+      // height collapsing to 0 independent of anything this script does.
+      // Forcing it back to the fixed height is a correction, not a guess at
+      // the underlying cause.
+      if (gd.clientHeight === 0) {
+        update.height = FIGURE_HEIGHT;
+      }
+
+      if (Object.keys(update).length > 0) {
         try {
-          window.Plotly.relayout(gd, { width: width });
+          window.Plotly.relayout(gd, update);
         } catch (e) {
           /* Not ready yet; the next scheduled pass will catch it. */
         }
@@ -35,23 +55,26 @@
   var pending = null;
   function scheduleSync() {
     clearTimeout(pending);
-    pending = setTimeout(syncWidths, 150);
+    pending = setTimeout(syncSizes, 150);
   }
 
-  // Covers opening the dashboard: Plotly's first measurement can race Dash's
-  // own layout hydration, so re-measure once the page has fully loaded.
   window.addEventListener("load", scheduleSync);
-
-  // Covers crossing a Bootstrap breakpoint: a column width change needs a
-  // fresh measurement to redraw at the right width.
   window.addEventListener("resize", scheduleSync);
 
-  // Covers a chart appearing after a Dash callback re-render — unlocking the
-  // dashboard, the first data refresh. Scoped to the app's own root so it
-  // doesn't react to unrelated browser-extension DOM changes.
   var root = document.getElementById("react-entry-point") || document.body;
   new MutationObserver(scheduleSync).observe(root, {
     childList: true,
     subtree: true,
   });
+
+  // A single chart collapsing to height 0 doesn't always touch the DOM again
+  // afterward (no further mutation to trigger the MutationObserver above), so
+  // a plain interval catches it independent of any other event firing. Runs
+  // only twice, shortly after load, rather than forever.
+  var attempts = 0;
+  var poll = setInterval(function () {
+    syncSizes();
+    attempts += 1;
+    if (attempts >= 2) clearInterval(poll);
+  }, 500);
 })();
