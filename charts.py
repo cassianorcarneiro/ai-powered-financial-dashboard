@@ -21,18 +21,15 @@ from config import DATE_FORMAT, Config as config
 # Pastel palette, cycled when a chart has more slices than the palette has colors.
 _PASTEL_PALETTE: list[str] = list(px.colors.qualitative.Pastel) + list(px.colors.qualitative.Set3)
 
-# Sizing is split deliberately: the height is pinned, the width is not.
-#
-# `height` is an explicit pixel value because the dbc.Col around each graph is
-# auto-sized. Left to derive its own height, Plotly could settle on a taller box
-# than the row reserves and overlap the content below on a re-render.
-#
-# `autosize` stays on so the width is taken from the container. With autosize
-# off and no explicit width, Plotly falls back to a default width instead of
-# measuring the column, which leaves the chart the wrong size whenever the first
-# paint happens before the layout has settled. autosize only governs dimensions
-# the figure leaves undefined, so it adjusts the width and never touches the
-# pinned height.
+# `autosize` is off. It was originally on so width tracked the container, but
+# client-side measurement showed it letting Plotly recompute BOTH dimensions
+# on a resize pass, not just the undefined one: bar charts (Cartesian, with
+# x/y axes) were ending up with a computed height of 0 while pie charts (no
+# axes) kept the correct height, even though every figure sets an explicit
+# `height=FIGURE_HEIGHT`. With autosize off, that height is authoritative and
+# nothing recomputes it. Width responsiveness now comes only from
+# assets/chart-resize.js calling Plotly.relayout with an explicit width — a
+# narrower operation than the resize/autosize path that was corrupting height.
 FIGURE_HEIGHT = 400
 
 # Plotly's `separators` takes the decimal mark followed by the thousands mark.
@@ -90,7 +87,7 @@ def empty_figure(message: str = "No data available") -> go.Figure:
     )
     fig.update_layout(
         height=FIGURE_HEIGHT,
-        autosize=True,
+        autosize=False,
         separators=DECIMAL_SEPARATORS,
         dragmode=False,
         xaxis=dict(visible=False, fixedrange=True),
@@ -114,7 +111,7 @@ def _apply_common_layout(fig: go.Figure) -> go.Figure:
     """
     fig.update_layout(
         height=FIGURE_HEIGHT,
-        autosize=True,
+        autosize=False,
         separators=DECIMAL_SEPARATORS,
         dragmode=False,
         plot_bgcolor=config.surface,

@@ -1,31 +1,27 @@
 /* =============================================================================
    AI POWERED FINANCIAL DASHBOARD
-   Forces Plotly to re-measure its charts after the DOM has actually settled.
+   Keeps each chart's width matched to its container, without touching height.
 
-   Bar charts (Cartesian: x/y axes, ticks, gridlines) occasionally render blank
-   if their container is measured at zero or transitional width — during the
-   page's first paint, or while Bootstrap reflows columns across a breakpoint.
-   Pie charts survive the same moment because they don't depend on axis tick
-   layout. `config.responsive: true` on each dcc.Graph (layout.py) is supposed
-   to cover this on its own via Plotly's internal ResizeObserver, but a bad
-   first measurement can leave a Cartesian plot in a state that a later resize
-   event doesn't recover from — only an explicit, later re-measurement does,
-   which is why reloading the page (a fresh first paint) fixes it.
-
-   This does not touch chart data or the Dash callback graph — it only asks
-   already-rendered Plotly figures to re-measure their container.
+   Earlier version of this file called Plotly.Plots.resize(gd), which measures
+   the container and can recompute BOTH width and height from it. Direct
+   measurement showed that recomputation returning height 0 for bar charts
+   (Cartesian: x/y axes) while leaving pie charts (no axes) correctly sized,
+   even though every figure sets an explicit `height` in charts.py. autosize is
+   now off in charts.py so nothing else can touch height either; this file
+   calls Plotly.relayout with only a `width` key, which changes exclusively
+   that property and leaves layout.height untouched.
    ============================================================================= */
 
 (function () {
   "use strict";
 
-  function resizeAllPlots() {
+  function syncWidths() {
     document.querySelectorAll(".js-plotly-plot").forEach(function (gd) {
-      // `gd.data` only exists once Plotly has actually initialized that div;
-      // calling resize before that throws.
-      if (window.Plotly && gd.data) {
+      if (!window.Plotly || !gd.data || !gd.parentElement) return;
+      var width = gd.parentElement.clientWidth;
+      if (width > 0 && width !== gd._fullLayout?.width) {
         try {
-          window.Plotly.Plots.resize(gd);
+          window.Plotly.relayout(gd, { width: width });
         } catch (e) {
           /* Not ready yet; the next scheduled pass will catch it. */
         }
@@ -35,29 +31,26 @@
 
   // Coalesces bursts of triggers (a window resize firing repeatedly while the
   // user drags, or several DOM mutations from one Dash re-render) into a
-  // single resize pass after things settle.
+  // single pass after things settle.
   var pending = null;
-  function scheduleResize() {
+  function scheduleSync() {
     clearTimeout(pending);
-    pending = setTimeout(resizeAllPlots, 150);
+    pending = setTimeout(syncWidths, 150);
   }
 
   // Covers opening the dashboard: Plotly's first measurement can race Dash's
   // own layout hydration, so re-measure once the page has fully loaded.
-  window.addEventListener("load", scheduleResize);
+  window.addEventListener("load", scheduleSync);
 
-  // Covers crossing a Bootstrap breakpoint: charts.py pins figure height but
-  // leaves width to the container, so a column width change needs a fresh
-  // measurement to redraw correctly.
-  window.addEventListener("resize", scheduleResize);
+  // Covers crossing a Bootstrap breakpoint: a column width change needs a
+  // fresh measurement to redraw at the right width.
+  window.addEventListener("resize", scheduleSync);
 
   // Covers a chart appearing after a Dash callback re-render — unlocking the
-  // dashboard, the first data refresh — cases responsive's own ResizeObserver
-  // does not reliably catch if that render's first measurement was at zero
-  // width. Scoped to the app's own root so it doesn't react to unrelated
-  // browser-extension DOM changes.
+  // dashboard, the first data refresh. Scoped to the app's own root so it
+  // doesn't react to unrelated browser-extension DOM changes.
   var root = document.getElementById("react-entry-point") || document.body;
-  new MutationObserver(scheduleResize).observe(root, {
+  new MutationObserver(scheduleSync).observe(root, {
     childList: true,
     subtree: true,
   });
