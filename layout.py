@@ -277,7 +277,21 @@ def _new_record_modal() -> dbc.Modal:
                             dbc.Col(
                                 [
                                     dbc.Label("Total Amount"),
-                                    dbc.Input(id="input-amount", type="number", step="0.01"),
+                                    # Text rather than number: a number input
+                                    # cannot hold a partially typed, formatted
+                                    # value, which the right-to-left currency
+                                    # mask in assets/input-masks.js relies on.
+                                    # inputMode still raises the numeric keypad
+                                    # on a phone. If the script fails to load,
+                                    # this degrades to a plain field where
+                                    # "-123.45" can simply be typed.
+                                    dbc.Input(
+                                        id="input-amount",
+                                        type="text",
+                                        inputMode="decimal",
+                                        value="0.00",
+                                        autoComplete="off",
+                                    ),
                                 ],
                                 xs=12,
                                 md=6,
@@ -710,7 +724,11 @@ def build_layout() -> html.Div:
                                 },
                                 row_selectable="multi",
                                 selected_rows=[],
-                                sort_action="native",
+                                # Server-side: sorting the rendered dd/mm/yyyy
+                                # and two-decimal strings would order them as
+                                # text. See _sort_view in app.py.
+                                sort_action="custom",
+                                sort_by=[],
                                 filter_action="native",
                                 page_action="native",
                                 editable=False,

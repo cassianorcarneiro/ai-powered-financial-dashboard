@@ -170,8 +170,54 @@ def current_timestamp() -> str:
     return datetime.now(zone).strftime(TIMESTAMP_FORMAT)
 
 
-def build_table_records(df: pd.DataFrame) -> list[dict[str, Any]]:
-    """Format transactions for display, newest first."""
+# Sort keys are taken from the underlying values, never from the formatted text.
+# A date rendered as dd/mm/yyyy and an amount rendered with two decimals both
+# sort wrongly as strings: "01/12/2025" precedes "09/01/2026" alphabetically, and
+# "-50.00" precedes "1000.00". The table therefore sorts server-side
+# (sort_action="custom") over the real datetime and float values.
+def _installment_index(value: object) -> int:
+    """Numeric sort key for an installment marker such as '2/6'."""
+    parsed = parse_installment(value)
+    return parsed[0] if parsed else 0
+
+
+def _sort_view(view: pd.DataFrame, sort_by: list[dict[str, Any]] | None) -> pd.DataFrame:
+    """Order the table by the requested columns, using pre-format values."""
+    if not sort_by:
+        return view.sort_values("Record Timestamp", ascending=False, na_position="last")
+
+    keys, ascending = [], []
+    for rule in sort_by:
+        column = rule.get("column_id")
+        if column not in view.columns:
+            continue
+        keys.append(column)
+        ascending.append(rule.get("direction", "asc") == "asc")
+
+    if not keys:
+        return view.sort_values("Record Timestamp", ascending=False, na_position="last")
+
+    scratch = view.copy()
+    sort_columns = []
+    for column in keys:
+        if column == "Installment":
+            helper = "__sort_installment"
+            scratch[helper] = scratch["Installment"].map(_installment_index)
+            sort_columns.append(helper)
+        else:
+            # Datetime and Amount columns are still typed at this point; string
+            # columns sort naturally.
+            sort_columns.append(column)
+
+    scratch = scratch.sort_values(sort_columns, ascending=ascending, na_position="last")
+    return scratch.drop(columns=[c for c in scratch.columns if c.startswith("__sort_")])
+
+
+def build_table_records(
+    df: pd.DataFrame,
+    sort_by: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Format transactions for display, newest first unless sorted otherwise."""
     if df.empty:
         return []
 
@@ -183,7 +229,7 @@ def build_table_records(df: pd.DataFrame) -> list[dict[str, Any]]:
     ):
         view[column] = pd.to_datetime(view[column], errors="coerce", format=fmt)
 
-    view = view.sort_values("Record Timestamp", ascending=False, na_position="last")
+    view = _sort_view(view, sort_by)
     # Preserved so deletions can match on the canonical stored values.
     view[_ISO_DATE_KEY] = view["Payment Date"].dt.strftime(DATE_FORMAT)
     view[_HASH_KEY] = view["Hash"]
@@ -196,6 +242,26 @@ def build_table_records(df: pd.DataFrame) -> list[dict[str, Any]]:
     view["Amount"] = view["Amount"].map(lambda v: f"{v:.2f}")
 
     return view[ui.TABLE_COLUMNS + [_ISO_DATE_KEY, _HASH_KEY]].to_dict("records")
+
+
+def parse_amount(raw: object) -> float:
+    """Read the amount field, which the client-side mask renders as text.
+
+    The mask produces a plain decimal such as "-123.45", but the field stays
+    usable if the script never loads, so this also accepts what someone would
+    type by hand: stray spaces, a leading "+", or a comma used as the decimal
+    mark. A thousands separator is not accepted, because the same character
+    would be ambiguous against a comma decimal mark.
+    """
+    if isinstance(raw, (int, float)):
+        return float(raw)
+
+    text = str(raw or "").strip().replace(" ", "").lstrip("+")
+    if not text:
+        raise ValueError("empty amount")
+    if text.count(",") == 1 and "." not in text:
+        text = text.replace(",", ".")
+    return float(text)
 
 
 def alert(message: str, color: str = "danger") -> dbc.Alert:
@@ -535,8 +601,8 @@ def insert_record(
         )
 
     try:
-        amount_value = float(amount)
-    except (TypeError, ValueError):
+        amount_value = parse_amount(amount)
+    except ValueError:
         return no_update, alert("Amount must be a number."), *[no_update] * 6
 
     if amount_value == 0:
@@ -569,7 +635,9 @@ def insert_record(
     message = alert(
         f"Added {len(records)} record(s) for '{label}'.", color="success"
     )
-    return (trigger_value or 0) + 1, message, "", None, None, None, 1, False
+    # Amount resets to "0.00" rather than blank so the mask has a value to build
+    # on from the first keystroke.
+    return (trigger_value or 0) + 1, message, "", None, None, "0.00", 1, False
 
 
 @app.callback(
@@ -616,6 +684,22 @@ def delete_records(_delete_purchase, _delete_installments, rows, selected, trigg
 # -----------------------------------------------------------------------------
 
 @app.callback(
+    Output("table-data", "data"),
+    Output("table-data", "selected_rows"),
+    Input("update-trigger", "data"),
+    Input("table-data", "sort_by"),
+)
+def refresh_table(_trigger, sort_by):
+    """Rebuild the transactions table, honouring the requested sort order.
+
+    Kept separate from the charts so re-sorting does not recompute seven
+    figures, and so the table keeps showing every record regardless of the
+    date filter applied to the charts.
+    """
+    return build_table_records(load_transactions(), sort_by), []
+
+
+@app.callback(
     Output("fig-cumulative", "figure"),
     Output("fig-method-share", "figure"),
     Output("fig-category-share", "figure"),
@@ -623,20 +707,23 @@ def delete_records(_delete_purchase, _delete_installments, rows, selected, trigg
     Output("fig-spent-monthly", "figure"),
     Output("fig-finishing", "figure"),
     Output("fig-starting", "figure"),
-    Output("table-data", "data"),
-    Output("table-data", "selected_rows"),
     Input("update-trigger", "data"),
     Input("date-start", "date"),
     Input("date-end", "date"),
 )
 def refresh_views(_trigger, start_date, end_date):
-    """Rebuild every chart and the transactions table."""
+    """Rebuild every chart for the selected period.
+
+    "Ignore Entry" is applied narrowly: it removes a record from the category
+    breakdown and from the metrics the language model sees, but leaves it in
+    every other chart. The flag marks a record whose category would distort the
+    breakdown, not one that should vanish from the account's totals.
+    """
     df = load_transactions()
-    table_records = build_table_records(df)
 
     if df.empty:
         blank = charts.empty_figure("No transactions recorded yet")
-        return (*[blank] * 7, table_records, [])
+        return (*[blank] * 7,)
 
     filtered = df.copy()
     filtered["Payment Date"] = pd.to_datetime(
@@ -651,11 +738,13 @@ def refresh_views(_trigger, start_date, end_date):
 
     if filtered.empty:
         blank = charts.empty_figure("No data in the selected period")
-        return (*[blank] * 7, table_records, [])
+        return (*[blank] * 7,)
 
-    active = filtered[filtered["Ignore Entry"] == 0].copy()
-    expenses = active[active["Amount"] < 0].copy()
+    expenses = filtered[filtered["Amount"] < 0].copy()
     expenses["Amount"] = expenses["Amount"].abs()
+
+    # Only the category breakdown drops flagged records.
+    category_expenses = expenses[expenses["Ignore Entry"] == 0]
 
     installment_index = expenses["Installment"].map(parse_installment)
     first_installments = expenses[
@@ -667,10 +756,10 @@ def refresh_views(_trigger, start_date, end_date):
 
     return (
         charts.monthly_bar(
-            active, "Payment Date", "Cumulative balance", config.blue_1, cumulative=True
+            filtered, "Payment Date", "Cumulative balance", config.blue_1, cumulative=True
         ),
         charts.share_pie(expenses, "Payment Method", "Spending by Payment Method"),
-        charts.share_pie(expenses, "Category", "Spending by Category"),
+        charts.share_pie(category_expenses, "Category", "Spending by Category"),
         charts.monthly_bar(expenses, "Payment Date", "Amount paid per month", config.red_1),
         charts.monthly_bar(
             expenses, "Transaction Date", "Amount spent per month", config.red_1
@@ -681,8 +770,6 @@ def refresh_views(_trigger, start_date, end_date):
         charts.monthly_bar(
             first_installments, "Payment Date", "Starting payments", config.yellow_1
         ),
-        table_records,
-        [],
     )
 
 
