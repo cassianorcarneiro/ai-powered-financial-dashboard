@@ -208,18 +208,13 @@ def share_pie(df: pd.DataFrame, group_column: str, title: str) -> go.Figure:
     fig.update_traces(
         textposition="outside",
         textinfo="percent+label",
-        # automargin lets Plotly recompute the pie's own domain at render time
-        # to fit outside labels — which was overriding the fixed domain below
-        # and letting labels rise back into the title's margin regardless of
-        # what was reserved for it. Turning it off makes the geometry fully
-        # deterministic: the domain and margin set here are exactly what
-        # renders, with no runtime recalculation to second-guess.
+        # Lets Plotly expand the figure's margins if an outside label would
+        # otherwise be clipped. A constrained `domain` was tried here to force
+        # extra clearance from the title above, but it wasn't the fix: the
+        # taller margin.t and the anchored title position in
+        # _apply_common_layout are what actually keep labels clear of the
+        # title. Plain automargin, with Plotly's default domain, is enough.
         automargin=True,
-        # The pie itself is deliberately smaller than its plot area (both x
-        # and y pulled in from the edges), so a label rising above or past the
-        # circle's own edge still lands inside empty space rather than in the
-        # title band or clipped against the figure's border.
-        #domain=dict(x=[0.08, 0.92], y=[0.04, 0.78]),
         hovertemplate=f"%{{label}}<br>{config.currency_symbol} %{{value:.2f}}<extra></extra>",
     )
     return _apply_common_layout(fig)
