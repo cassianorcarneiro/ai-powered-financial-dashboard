@@ -214,12 +214,12 @@ def share_pie(df: pd.DataFrame, group_column: str, title: str) -> go.Figure:
         # what was reserved for it. Turning it off makes the geometry fully
         # deterministic: the domain and margin set here are exactly what
         # renders, with no runtime recalculation to second-guess.
-        automargin=False,
+        automargin=True,
         # The pie itself is deliberately smaller than its plot area (both x
         # and y pulled in from the edges), so a label rising above or past the
         # circle's own edge still lands inside empty space rather than in the
         # title band or clipped against the figure's border.
-        domain=dict(x=[0.08, 0.92], y=[0.04, 0.78]),
+        #domain=dict(x=[0.08, 0.92], y=[0.04, 0.78]),
         hovertemplate=f"%{{label}}<br>{config.currency_symbol} %{{value:.2f}}<extra></extra>",
     )
     return _apply_common_layout(fig)
