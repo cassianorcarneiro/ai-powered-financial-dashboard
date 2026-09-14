@@ -102,6 +102,11 @@ class Config:
     text_muted: str = "#8A8A8A"     # secondary text, placeholders
     accent: str = "#37C3F7"         # headings, primary actions, key series
 
+    # Panels (charts, cards, the table) share one outline so they read as the
+    # same kind of surface. Defined once here; assets/theme.css repeats the
+    # values for the elements Dash renders itself.
+    panel_radius: str = "8px"
+
     # ----- Chart series ------------------------------------------------------
     # Muted pastels: saturated fills vibrate against a near-black background,
     # while these stay legible without competing with the accent.

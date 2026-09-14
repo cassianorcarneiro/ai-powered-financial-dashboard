@@ -105,3 +105,28 @@ select.form-select {
   color: #E6E6E6;
   border: 1px solid #444444;
 }
+
+/* -----------------------------------------------------------------------------
+   Panel outlines.
+
+   Charts and the table are drawn by Dash rather than constructed in layout.py,
+   so their outline is set here. The values match Config.border and
+   Config.panel_radius; keep them in step.
+
+   `overflow: hidden` matters: Plotly paints a square background, which would
+   otherwise poke through the rounded corners of the container.
+   -------------------------------------------------------------------------- */
+.dash-graph,
+#table-data {
+  background-color: #171717;
+  border: 1px solid #444444;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* The table draws its own cell borders; without this the outer radius is
+   squared off again by the header row's corners. */
+#table-data .dash-spreadsheet-container,
+#table-data .dash-spreadsheet-inner {
+  border-radius: 8px;
+}

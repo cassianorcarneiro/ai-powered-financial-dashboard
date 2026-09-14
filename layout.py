@@ -49,7 +49,8 @@ SECONDARY_BUTTON_STYLE = {
 
 CARD_BODY_STYLE = {
     "backgroundColor": config.surface,
-    "borderColor": config.surface,
+    "border": f"1px solid {config.border}",
+    "borderRadius": config.panel_radius,
     "color": config.text,
     "fontSize": config.fontsize_1,
 }
