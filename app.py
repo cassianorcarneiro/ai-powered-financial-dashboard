@@ -228,6 +228,34 @@ app = Dash(
 app.layout = ui.build_layout
 server = app.server  # WSGI entry point used by gunicorn
 
+# Dash's default template already inserts assets/favicon.ico via {%favicon%},
+# so the browser tab icon needs no extra markup. These three tags cover what
+# that placeholder does not: the manifest is what lets Chrome on Android draw
+# a real icon (rather than a cropped screenshot) when the page is added to the
+# home screen; apple-touch-icon is Safari/iOS's separate equivalent; and
+# theme-color tints the browser chrome so the shortcut feels like an app
+# rather than a bookmark.
+app.index_string = """<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <link rel="manifest" href="/assets/manifest.json">
+        <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+        <meta name="theme-color" content="#343d46">
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>"""
+
 if config.request_password:
     if not config.valid_users:
         raise SystemExit(

@@ -32,6 +32,10 @@ LICENSE
 docs/
 examples/
 
+# Design-time icon generator; not imported by the running app, and its only
+# dependency (Pillow) is not part of requirements.txt
+generate_icons.py
+
 # Financial data is bind-mounted, never baked into the image
 data/
 

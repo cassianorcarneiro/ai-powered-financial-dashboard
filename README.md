@@ -21,7 +21,7 @@ A Python-based personal finance dashboard that turns CSV-stored transactions int
 - 🔒 **Privacy-first** — all data stays on your machine; the LLM runs locally
 - 💾 **Persistent data** — your CSVs live on the host filesystem, untouched by container restarts
 - 🛟 **Graceful degradation** — when the model is unavailable or out of memory, a deterministic summary is shown instead of an error
-- 📱 **Usable on a phone** — charts stack to a single column, controls meet minimum touch-target sizes, and the table keeps its first column in view while scrolling sideways
+- 📱 **Usable on a phone** — charts stack to a single column, controls meet minimum touch-target sizes, and the app can be added to the home screen with its own icon
 
 ---
 
@@ -333,6 +333,27 @@ An existing CSV does not match the expected header. Compare it against the table
 
 ---
 
+---
+
+## 🎨 App icon
+
+The browser tab icon and the icon used when the dashboard is added to a phone's
+home screen are generated from the same palette as the charts (`config.py`),
+rather than using the framework's default icon.
+
+To change the design, edit `generate_icons.py` and re-run it:
+
+```bash
+pip install pillow
+python generate_icons.py
+```
+
+This overwrites `assets/favicon.ico`, `assets/icon-192.png`,
+`assets/icon-512.png` and `assets/apple-touch-icon.png`. Pillow is only needed
+for this step; it is not a dependency of the running app.
+
+---
+
 ## 📁 Project structure
 
 ```
@@ -345,8 +366,14 @@ An existing CSV does not match the expected header. Compare it against the table
 ├── charts.py               # Plotly figure factory
 ├── layout.py               # Dash component tree
 ├── assets/                 # Served automatically by Dash
-│   ├── mobile.css          # Responsive tweaks, sticky first table column
-│   └── datepicker.css      # Aligns the date field with Bootstrap form controls
+│   ├── mobile.css          # Responsive tweaks, dismissible-alert fix
+│   ├── datepicker.css      # Aligns the date field with Bootstrap form controls
+│   ├── favicon.ico         # Browser tab icon
+│   ├── icon-192.png        # Android/PWA home-screen icon
+│   ├── icon-512.png        # Android/PWA home-screen icon (high-res)
+│   ├── apple-touch-icon.png # iOS home-screen icon
+│   └── manifest.json       # Lets "Add to Home Screen" use the icons above
+├── generate_icons.py       # Regenerates the icon set from config.py's palette
 ├── requirements.txt        # Python dependencies
 ├── Dockerfile              # Dashboard image (non-root, Gunicorn)
 ├── docker-compose.yaml     # Dashboard, plus optional bundled Ollama
