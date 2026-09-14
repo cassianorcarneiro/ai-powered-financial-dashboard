@@ -310,7 +310,7 @@ app.index_string = """<!DOCTYPE html>
         {%css%}
         <link rel="manifest" href="/assets/manifest.json">
         <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
-        <meta name="theme-color" content="#343d46">
+        <meta name="theme-color" content="#0B0F14">
     </head>
     <body>
         {%app_entry%}
@@ -756,19 +756,19 @@ def refresh_views(_trigger, start_date, end_date):
 
     return (
         charts.monthly_bar(
-            filtered, "Payment Date", "Cumulative balance", config.blue_1, cumulative=True
+            filtered, "Payment Date", "Cumulative balance", config.accent, cumulative=True
         ),
         charts.share_pie(expenses, "Payment Method", "Spending by Payment Method"),
         charts.share_pie(category_expenses, "Category", "Spending by Category"),
-        charts.monthly_bar(expenses, "Payment Date", "Amount paid per month", config.red_1),
+        charts.monthly_bar(expenses, "Payment Date", "Amount paid per month", config.series_red),
         charts.monthly_bar(
-            expenses, "Transaction Date", "Amount spent per month", config.red_1
+            expenses, "Transaction Date", "Amount spent per month", config.series_red
         ),
         charts.monthly_bar(
-            last_installments, "Payment Date", "Finishing payments", config.green_1
+            last_installments, "Payment Date", "Finishing payments", config.series_green
         ),
         charts.monthly_bar(
-            first_installments, "Payment Date", "Starting payments", config.yellow_1
+            first_installments, "Payment Date", "Starting payments", config.series_yellow
         ),
     )
 

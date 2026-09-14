@@ -49,14 +49,14 @@ DECIMAL_SEPARATORS = "."
 # config would leave gaps, since each input path is configured separately.
 _AXIS_X = dict(
     showgrid=False,
-    gridcolor=config.gray_1,
+    gridcolor=config.border,
     gridwidth=1.0,
     fixedrange=True,
 )
 _AXIS_Y = dict(
-    gridcolor=config.gray_1,
+    gridcolor=config.border,
     gridwidth=1.0,
-    zerolinecolor=config.gray_3,
+    zerolinecolor=config.border,
     zerolinewidth=3.0,
     fixedrange=True,
 )
@@ -79,7 +79,7 @@ def empty_figure(message: str = "No data available") -> go.Figure:
         x=0.5,
         y=0.5,
         showarrow=False,
-        font=dict(size=16, color=config.blue_1),
+        font=dict(size=16, color=config.text),
     )
     fig.update_layout(
         height=FIGURE_HEIGHT,
@@ -88,8 +88,8 @@ def empty_figure(message: str = "No data available") -> go.Figure:
         dragmode=False,
         xaxis=dict(visible=False, fixedrange=True),
         yaxis=dict(visible=False, fixedrange=True),
-        plot_bgcolor=config.blue_2,
-        paper_bgcolor=config.blue_2,
+        plot_bgcolor=config.surface,
+        paper_bgcolor=config.surface,
         margin=dict(t=40, b=40, l=40, r=40),
     )
     return fig
@@ -102,10 +102,10 @@ def _apply_common_layout(fig: go.Figure) -> go.Figure:
         autosize=True,
         separators=DECIMAL_SEPARATORS,
         dragmode=False,
-        plot_bgcolor=config.blue_2,
-        paper_bgcolor=config.blue_2,
-        title_font_color=config.blue_1,
-        font_color=config.blue_1,
+        plot_bgcolor=config.surface,
+        paper_bgcolor=config.surface,
+        title_font_color=config.text,
+        font_color=config.text,
         font_size=config.chart_fontsize_1,
         margin=dict(t=60, b=50, l=50, r=30),
     )

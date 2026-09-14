@@ -10,10 +10,10 @@ from PIL import Image, ImageDraw
 
 from config import Config as config
 
-BG = config.blue_3      # #343d46 — matches the page background
-BAR_1 = config.yellow_1  # #FED9A6
-BAR_2 = config.blue_4    # #3385c6
-BAR_3 = config.green_1   # #CCEBC5
+BG = config.bg               # matches the page background
+BAR_1 = config.series_yellow
+BAR_2 = config.accent
+BAR_3 = config.series_green
 
 
 def draw_icon(size: int) -> Image.Image:

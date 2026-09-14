@@ -91,21 +91,23 @@ class Config:
     request_password: bool = _env_bool("REQUEST_PASSWORD", False)
     valid_users: dict[str, str] = _parse_users(os.getenv("DASHBOARD_USERS"))
 
-    # ----- Theme: grays -----
-    gray_1: str = "#bbbbbb"
-    gray_2: str = "#65737e"
-    gray_3: str = "#aaaaaa"
+    # ----- Theme -------------------------------------------------------------
+    # A dark, near-black surface palette. Names describe the role rather than
+    # the hue so a future re-theme touches this block only.
+    bg: str = "#0B0F14"             # page background
+    surface: str = "#171717"        # cards, chart panels, modal bodies
+    surface_raised: str = "#1F1F1F" # table headers, toolbar buttons
+    border: str = "#444444"         # panel edges, chart gridlines
+    text: str = "#E6E6E6"           # primary text on dark surfaces
+    text_muted: str = "#8A8A8A"     # secondary text, placeholders
+    accent: str = "#37C3F7"         # headings, primary actions, key series
 
-    # ----- Theme: accent colors -----
-    red_1: str = "#FBB4AE"
-    green_1: str = "#CCEBC5"
-    yellow_1: str = "#FED9A6"
-
-    # ----- Theme: blues (primary palette) -----
-    blue_1: str = "#B3CDEF"
-    blue_2: str = "#58668b"
-    blue_3: str = "#343d46"
-    blue_4: str = "#3385c6"
+    # ----- Chart series ------------------------------------------------------
+    # Muted pastels: saturated fills vibrate against a near-black background,
+    # while these stay legible without competing with the accent.
+    series_red: str = "#E8A49C"
+    series_green: str = "#A8D5A0"
+    series_yellow: str = "#E8C88A"
 
     # ----- Typography -----
     fontsize_1: str = "15px"     # Modal body, buttons, table

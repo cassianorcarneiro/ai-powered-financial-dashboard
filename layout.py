@@ -26,43 +26,45 @@ from storage import (
 # -----------------------------------------------------------------------------
 
 ICON_BUTTON_STYLE = {
-    "backgroundColor": config.blue_2,
-    "borderColor": config.blue_2,
-    "color": config.blue_1,
+    "backgroundColor": config.surface,
+    "borderColor": config.surface,
+    "color": config.text,
     "fontSize": config.fontsize_1,
     "minHeight": "44px",
 }
 
 PRIMARY_BUTTON_STYLE = {
-    "backgroundColor": config.blue_4,
-    "borderColor": config.blue_4,
+    "backgroundColor": config.accent,
+    "borderColor": config.accent,
     "color": "white",
     "fontSize": config.fontsize_1,
 }
 
 SECONDARY_BUTTON_STYLE = {
-    "backgroundColor": config.gray_2,
-    "borderColor": config.gray_2,
+    "backgroundColor": config.surface_raised,
+    "borderColor": config.surface_raised,
     "color": "white",
     "fontSize": config.fontsize_1,
 }
 
 CARD_BODY_STYLE = {
-    "backgroundColor": config.blue_2,
-    "borderColor": config.blue_2,
-    "color": config.blue_1,
+    "backgroundColor": config.surface,
+    "borderColor": config.surface,
+    "color": config.text,
     "fontSize": config.fontsize_1,
 }
 
 MODAL_HEADER_STYLE = {
-    "backgroundColor": config.gray_1,
+    "backgroundColor": config.surface_raised,
+    "color": config.text,
+    "borderBottom": f"1px solid {config.border}",
     "fontWeight": "bold",
     "fontSize": config.fontsize_2,
 }
 
 MODAL_BODY_STYLE = {
-    "backgroundColor": config.gray_1,
-    "fontWeight": "bold",
+    "backgroundColor": config.surface,
+    "color": config.text,
     "fontSize": config.fontsize_1,
 }
 
@@ -173,7 +175,7 @@ def _ai_card() -> dbc.Card:
                         style={"whiteSpace": "pre-wrap"},
                     ),
                     type="default",
-                    color=config.blue_1,
+                    color=config.text,
                 ),
             ]
         ),
@@ -356,7 +358,10 @@ def _new_record_modal() -> dbc.Modal:
                     dbc.Button("Insert", id="btn-save", style=PRIMARY_BUTTON_STYLE),
                     dbc.Button("Cancel", id="btn-close", style=SECONDARY_BUTTON_STYLE),
                 ],
-                style={"backgroundColor": config.gray_1},
+                style={
+                    "backgroundColor": config.surface_raised,
+                    "borderTop": f"1px solid {config.border}",
+                },
             ),
         ],
         id="modal",
@@ -510,13 +515,16 @@ def _editor_modal(
     return dbc.Modal(
         [
             dbc.ModalHeader(title, style=MODAL_HEADER_STYLE),
-            dbc.ModalBody(body, style={"backgroundColor": config.gray_1, "padding": "24px"}),
+            dbc.ModalBody(body, style={"backgroundColor": config.surface, "padding": "24px"}),
             dbc.ModalFooter(
                 [
                     dbc.Button("Save", id=save_button_id, style=PRIMARY_BUTTON_STYLE),
                     dbc.Button("Close", id=close_button_id, style=SECONDARY_BUTTON_STYLE),
                 ],
-                style={"backgroundColor": config.gray_1},
+                style={
+                    "backgroundColor": config.surface_raised,
+                    "borderTop": f"1px solid {config.border}",
+                },
             ),
         ],
         id=modal_id,
@@ -605,7 +613,7 @@ def build_layout() -> html.Div:
             html.H1(
                 "Financial Control",
                 className="text-center my-4 py-2",
-                style={"backgroundColor": config.blue_3, "color": "white"},
+                style={"backgroundColor": config.bg, "color": config.accent},
             ),
             dbc.Container(
                 [
@@ -710,13 +718,13 @@ def build_layout() -> html.Div:
                                 # the charts above. Plain horizontal scrolling is
                                 # correct in every state.
                                 style_header={
-                                    "backgroundColor": config.blue_2,
-                                    "color": config.blue_1,
+                                    "backgroundColor": config.surface,
+                                    "color": config.text,
                                     "fontSize": config.fontsize_1,
                                 },
                                 style_cell={
-                                    "backgroundColor": config.blue_3,
-                                    "color": config.blue_1,
+                                    "backgroundColor": config.bg,
+                                    "color": config.text,
                                     "textAlign": "center",
                                     "minWidth": "100px",
                                     "whiteSpace": "normal",
@@ -739,8 +747,8 @@ def build_layout() -> html.Div:
                     ),
                 ],
                 fluid=True,
-                style={"backgroundColor": config.blue_3},
+                style={"backgroundColor": config.bg},
             ),
         ],
-        style={"backgroundColor": config.blue_3, "minHeight": "100vh", "padding": "20px"},
+        style={"backgroundColor": config.bg, "minHeight": "100vh", "padding": "20px"},
     )
