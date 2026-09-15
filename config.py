@@ -124,9 +124,8 @@ class Config:
     series_yellow: str = "#E8C88A"
 
     # ----- Typography -----
-    fontsize_1: str = "15px"     # Modal body, buttons, table
+    fontsize_1: str = "15px"     # Modal body, buttons, table, filters
     fontsize_2: str = "20px"     # Modal titles
-    fontsize_3: str = "18px"     # Filter labels
     chart_fontsize_1: int = 12   # Charts
 
 

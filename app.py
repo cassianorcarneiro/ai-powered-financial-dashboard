@@ -863,9 +863,32 @@ def refresh_views(_trigger, start_date, end_date):
     """
     df = load_transactions()
 
+    def _spent_per_month() -> go.Figure:
+        """Independent of the Payment Date filtering below — see its own
+        computation for why it needs a different date column entirely."""
+        spent_source = df.copy()
+        spent_source["Transaction Date"] = pd.to_datetime(
+            spent_source["Transaction Date"], errors="coerce", format=DATE_FORMAT
+        )
+        spent_source = spent_source.dropna(subset=["Transaction Date"])
+        if start_date:
+            spent_source = spent_source[
+                spent_source["Transaction Date"] >= pd.to_datetime(start_date)
+            ]
+        if end_date:
+            spent_source = spent_source[
+                spent_source["Transaction Date"] <= pd.to_datetime(end_date)
+            ]
+        spent_source = spent_source[spent_source["Amount"] < 0].copy()
+        spent_source["Amount"] = spent_source["Amount"].abs()
+        spent_totals = charts.purchase_totals_by_month(spent_source, "Transaction Date")
+        return charts.monthly_bar(
+            spent_totals, "Transaction Date", "Amount spent per month", config.series_red
+        )
+
     if df.empty:
         blank = charts.empty_figure("No transactions recorded yet")
-        return (*[blank] * 7,)
+        return (*[blank] * 4, _spent_per_month(), *[blank] * 2)
 
     filtered = df.copy()
     filtered["Payment Date"] = pd.to_datetime(
@@ -878,9 +901,17 @@ def refresh_views(_trigger, start_date, end_date):
         filtered = filtered[filtered["Payment Date"] <= pd.to_datetime(end_date)]
     filtered["Payment Date"] = filtered["Payment Date"].dt.strftime(DATE_FORMAT)
 
+    # "Amount spent per month" is computed once, here, regardless of whether
+    # the Payment Date window below turns out empty: it answers "what did
+    # buying this cost in total", so an installment purchase counts once, in
+    # the month it was made, at its full value — never spread thin across
+    # whichever of its installments happen to fall inside a Payment Date
+    # window built for a different question.
+    spent_fig = _spent_per_month()
+
     if filtered.empty:
         blank = charts.empty_figure("No data in the selected period")
-        return (*[blank] * 7,)
+        return (*[blank] * 4, spent_fig, *[blank] * 2)
 
     expenses = filtered[filtered["Amount"] < 0].copy()
     expenses["Amount"] = expenses["Amount"].abs()
@@ -903,9 +934,7 @@ def refresh_views(_trigger, start_date, end_date):
         charts.share_pie(expenses, "Payment Method", "Spending by Payment Method"),
         charts.share_pie(category_expenses, "Category", "Spending by Category"),
         charts.monthly_bar(expenses, "Payment Date", "Amount paid per month", config.series_red),
-        charts.monthly_bar(
-            expenses, "Transaction Date", "Amount spent per month", config.series_red
-        ),
+        spent_fig,
         charts.monthly_bar(
             last_installments, "Payment Date", "Finishing payments", config.series_green
         ),

@@ -236,7 +236,14 @@ def _filters(start_date: str, end_date: str) -> dbc.Collapse:
                         ),
                     ]
                 ),
-                style={**CARD_BODY_STYLE, "fontSize": config.fontsize_3},
+                # Matches fontsize_1, the size used everywhere else on the
+                # page (buttons, modals, table); this panel was the one place
+                # still set to fontsize_3 (18px), which read as oversized next
+                # to the toolbar it sits under. Padding is trimmed from
+                # Bootstrap's CardBody default (1.25rem) for the same reason:
+                # a full-size card-within-a-card reads heavier than a filter
+                # bar needs to.
+                style={**CARD_BODY_STYLE, "fontSize": config.fontsize_1, "padding": "0.75rem 1rem"},
             ),
             style=CARD_BODY_STYLE,
         ),

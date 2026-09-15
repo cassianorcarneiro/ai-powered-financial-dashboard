@@ -17,6 +17,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from config import DATE_FORMAT, Config as config
+from metrics import parse_installment
 
 # Pastel palette, cycled when a chart has more slices than the palette has colors.
 _PASTEL_PALETTE: list[str] = list(px.colors.qualitative.Pastel) + list(px.colors.qualitative.Set3)
@@ -137,6 +138,45 @@ def _fill_month_gaps(df: pd.DataFrame, date_column: str) -> pd.DataFrame:
         .reset_index()
     )
     return filled
+
+
+def purchase_totals_by_month(df: pd.DataFrame, date_column: str) -> pd.DataFrame:
+    """One row per purchase, with Amount reconstructed to the full original total.
+
+    Feeding a table of installment rows straight into `monthly_bar` sums
+    whatever rows happen to be present — which is exactly right for "what was
+    paid this month" (each installment is its own real cash movement), but
+    wrong for "what was spent this month": a 12-installment purchase made in
+    January is one purchase of one total value, not twelve unrelated amounts
+    scattered across the following year. Summing only the rows visible in the
+    current view undercounts it whenever some installments fall outside that
+    view (a narrower date range) or have been deleted from storage outright.
+
+    This reconstructs the total from whichever installment happens to survive:
+    any one installment's amount, multiplied by the count from its own marker
+    (e.g. "3/12" -> 12), reproduces the original purchase total regardless of
+    which installments are actually present. A non-installment row ("1/1" or
+    unparseable) has an implicit count of 1, so ordinary single-payment
+    expenses pass through unchanged.
+    """
+    if df.empty or "Hash" not in df.columns:
+        return df
+
+    d = df.copy()
+    d[date_column] = pd.to_datetime(d[date_column], errors="coerce", format=DATE_FORMAT)
+    d = d.dropna(subset=[date_column])
+    if d.empty:
+        return pd.DataFrame(columns=[date_column, "Amount"])
+
+    def _reconstruct(row: pd.Series) -> float:
+        parsed = parse_installment(row.get("Installment"))
+        count = parsed[1] if parsed else 1
+        return row["Amount"] * count
+
+    one_row_per_purchase = d.sort_values(date_column).groupby("Hash", as_index=False).first()
+    one_row_per_purchase["Amount"] = one_row_per_purchase.apply(_reconstruct, axis=1)
+    one_row_per_purchase[date_column] = one_row_per_purchase[date_column].dt.strftime(DATE_FORMAT)
+    return one_row_per_purchase[[date_column, "Amount"]]
 
 
 def monthly_bar(
