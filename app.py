@@ -957,7 +957,12 @@ def refresh_views(_trigger, start_date, end_date):
 )
 def update_ai_comment(_n_clicks, end_date):
     """Generate the written commentary for the trailing twelve months."""
-    metrics = compute_window_metrics(load_transactions(), end_date=end_date)
+    payment_method_types = {
+        name: info["type"] for name, info in get_payment_methods().items()
+    }
+    metrics = compute_window_metrics(
+        load_transactions(), end_date=end_date, payment_method_types=payment_method_types
+    )
     insight = get_insight(metrics)
     text = f"{insight.text}\n\n_Last update: {current_timestamp()}_"
     return text, html.Span(f"Status: {insight.status.value}")

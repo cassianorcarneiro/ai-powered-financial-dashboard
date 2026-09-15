@@ -82,9 +82,17 @@ def build_prompt(metrics: dict[str, Any], currency: str) -> str:
         "- Never invent numbers; use only the values provided.\n"
         f"- All amounts are expressed in {currency}.\n"
         "- Negative trends mean spending decreased; positive means it increased.\n"
-        "- Cover: net balance, recent spending trend, largest categories, "
-        "volatility, and any observation about installments.\n"
-        "- Finish with exactly three numbered, practical actions.\n\n"
+        "- A metric that is null or missing was not computable from the data; "
+        "skip it silently rather than commenting on its absence or guessing a value.\n"
+        "- Cover: net balance; both the spending AND income trends, and what their "
+        "difference implies about the change in net balance; largest categories; "
+        "volatility; the split between credit and debit spending, when present; and "
+        "upcoming installment commitments (`upcoming_installments`) — call out "
+        "purchases finishing soon as freed-up monthly budget, and purchases "
+        "starting soon as new recurring commitment.\n"
+        "- Finish with exactly three numbered, practical actions. Prefer actions "
+        "grounded in `upcoming_installments` or `payment_type_share` when they are "
+        "present and material, over generic advice restating the totals.\n\n"
         f"METRICS (JSON):\n{json.dumps(metrics, ensure_ascii=False)}\n"
     )
 
@@ -176,6 +184,19 @@ def _fallback_summary(metrics: dict[str, Any], reason: str) -> str:
     if trend is not None:
         direction = "up" if trend > 0 else "down"
         lines.append(f"- 3-month expense trend: {direction} {abs(trend) * 100:.1f}%")
+
+    income_trend = monthly.get("income_trend_3m")
+    if income_trend is not None:
+        direction = "up" if income_trend > 0 else "down"
+        lines.append(f"- 3-month income trend: {direction} {abs(income_trend) * 100:.1f}%")
+
+    finishing = metrics.get("upcoming_installments", {}).get("finishing_soon", {})
+    if finishing.get("count"):
+        months = metrics["upcoming_installments"]["horizon_months"]
+        lines.append(
+            f"- {finishing['count']} installment purchase(s) finish within {months} "
+            f"month(s), freeing up {finishing['value']:.2f}/month"
+        )
 
     top_categories = metrics.get("top", {}).get("categories", {})
     if top_categories:

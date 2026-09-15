@@ -56,11 +56,21 @@ def _avg_tail(series: pd.Series, n: int) -> float:
     return float(series.tail(n).mean())
 
 
-def compute_window_metrics(df: pd.DataFrame, end_date: str | None) -> dict[str, Any]:
+def compute_window_metrics(
+    df: pd.DataFrame,
+    end_date: str | None,
+    payment_method_types: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Aggregate the trailing 12 months ending at `end_date` (or at the last record).
 
     The returned dictionary is the only thing sent to the language model, so it
     deliberately contains aggregates rather than individual transactions.
+
+    `payment_method_types` maps a payment method's name to "Credit" or "Debit"
+    (`storage.get_payment_methods()`, read at the call site). This module stays
+    decoupled from storage.py; passing the mapping in keeps that boundary while
+    still letting the credit/debit split be computed here alongside everything
+    else. Omit it and that split is simply left out of the result.
     """
     if df.empty:
         return {"has_data": False}
@@ -101,6 +111,12 @@ def compute_window_metrics(df: pd.DataFrame, end_date: str | None) -> dict[str, 
         (expense_last - expense_prev) / expense_prev if expense_prev > 0 else None
     )
 
+    income_last = _avg_tail(monthly_income, TREND_MONTHS)
+    income_prev = _avg_tail(monthly_income.iloc[:-TREND_MONTHS], TREND_MONTHS)
+    income_trend = (
+        (income_last - income_prev) / income_prev if income_prev > 0 else None
+    )
+
     # ----- Dispersion: coefficient of variation of monthly expenses
     expense_mean = float(monthly_expense.mean())
     expense_std = float(monthly_expense.std(ddof=0))
@@ -116,6 +132,20 @@ def compute_window_metrics(df: pd.DataFrame, end_date: str | None) -> dict[str, 
     top_methods = (
         expenses.groupby("Payment Method")["abs_amount"].sum().sort_values(ascending=False).head(5)
     )
+
+    # Share of spending by payment method type (Credit vs. Debit), when the
+    # caller supplied the mapping. A method with no match (deleted, renamed
+    # since the transaction was recorded) falls into "Unknown" rather than
+    # being silently dropped, so the shares are still traceable back to 100%
+    # of the window's expense total.
+    payment_type_share: dict[str, float] | None = None
+    if payment_method_types:
+        pm_type = expenses["Payment Method"].map(payment_method_types).fillna("Unknown")
+        by_type = expenses.groupby(pm_type)["abs_amount"].sum()
+        if expense > 0:
+            payment_type_share = {
+                str(k): round(float(v) / expense, 4) for k, v in by_type.items()
+            }
 
     largest_expense = None
     if not expenses.empty:
@@ -133,6 +163,40 @@ def compute_window_metrics(df: pd.DataFrame, end_date: str | None) -> dict[str, 
         if expense > 0
         else None
     )
+
+    # Forward-looking, unlike everything above: uses `d` (every expense on
+    # record) rather than `window`, because a purchase's remaining or upcoming
+    # installments legitimately fall after `end_ts`, outside the trailing
+    # 12-month lookback the rest of this function reports on. Scoped to
+    # multi-installment purchases only — a single future-dated expense is not
+    # a "commitment" in the sense meant here, just an ordinary entry that
+    # hasn't come due yet.
+    HORIZON_MONTHS = 3
+    horizon_end = end_ts + relativedelta(months=HORIZON_MONTHS)
+
+    future_expenses = d[(d["Amount"] < 0) & (d["Ignore Entry"] == 0)].copy()
+    future_expenses["abs_amount"] = future_expenses["Amount"].abs()
+    future_expenses["parsed"] = future_expenses["Installment"].map(parse_installment)
+    future_installments = future_expenses[future_expenses["parsed"].notna()].copy()
+    future_installments["index"] = future_installments["parsed"].map(lambda p: p[0])
+    future_installments["count"] = future_installments["parsed"].map(lambda p: p[1])
+
+    not_yet_paid = future_installments[future_installments["Payment Date"] > end_ts]
+    remaining_committed_value = float(not_yet_paid["abs_amount"].sum())
+
+    last_installment_rows = future_installments[
+        future_installments["index"] == future_installments["count"]
+    ]
+    finishing_soon = last_installment_rows[
+        (last_installment_rows["Payment Date"] > end_ts)
+        & (last_installment_rows["Payment Date"] <= horizon_end)
+    ]
+
+    first_installment_rows = future_installments[future_installments["index"] == 1]
+    starting_soon = first_installment_rows[
+        (first_installment_rows["Payment Date"] > end_ts)
+        & (first_installment_rows["Payment Date"] <= horizon_end)
+    ]
 
     def _round_map(series: pd.Series) -> dict[str, float]:
         return {str(k): round(float(v), 2) for k, v in series.items()}
@@ -156,12 +220,26 @@ def compute_window_metrics(df: pd.DataFrame, end_date: str | None) -> dict[str, 
             "income_mean": round(float(monthly_income.mean()), 2),
             "expense_cv": _round_or_none(expense_cv),
             "expense_trend_3m": _round_or_none(expense_trend),
+            "income_trend_3m": _round_or_none(income_trend),
         },
         "top": {
             "categories": _round_map(top_categories),
             "payment_methods": _round_map(top_methods),
         },
+        "payment_type_share": payment_type_share,
         "largest_expense": largest_expense,
         "installment_share": _round_or_none(installment_share),
+        "upcoming_installments": {
+            "horizon_months": HORIZON_MONTHS,
+            "remaining_committed_value": round(remaining_committed_value, 2),
+            "finishing_soon": {
+                "count": int(len(finishing_soon)),
+                "value": round(float(finishing_soon["abs_amount"].sum()), 2),
+            },
+            "starting_soon": {
+                "count": int(len(starting_soon)),
+                "value": round(float(starting_soon["abs_amount"].sum()), 2),
+            },
+        },
         "months_count": int(len(monthly_expense)),
     }
