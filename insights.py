@@ -130,6 +130,16 @@ def generate(prompt: str, model: str | None = None) -> str:
         "prompt": prompt,
         "stream": False,
         "options": {"temperature": 0.2, "top_p": 0.9},
+        # Unloads the model from VRAM as soon as this response is done,
+        # instead of leaving it resident on Ollama's own default idle
+        # timeout. This dashboard's insight button is used occasionally,
+        # not in a hot loop, so the cost — a few extra seconds to reload
+        # the model from disk on the next request — is cheap. Leaving VRAM
+        # held between requests is not: unlike system RAM, CUDA memory
+        # isn't shared or reclaimed automatically between processes, so a
+        # model idling here can starve an unrelated GPU workload (e.g. an
+        # RL training run) of memory it has no way to get back on its own.
+        "keep_alive": 0,
     }
 
     attempts = max(1, config.ollama_retries + 1)
