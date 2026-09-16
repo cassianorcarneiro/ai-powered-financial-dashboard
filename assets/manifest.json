@@ -2,7 +2,7 @@
   "name": "Financial Control",
   "short_name": "Finance",
   "description": "Personal finance dashboard with local AI insights.",
-  "start_url": "/?app=finance",
+  "start_url": "/",
   "id": "/financial-dashboard",
   "display": "standalone",
   "background_color": "#0B0F14",
