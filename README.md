@@ -192,6 +192,7 @@ All runtime configuration is done through environment variables, exposed via `.e
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `DASHBOARD_PORT` | `8050` | Host port mapped to the dashboard |
+| `DASHBOARD_BIND` | `0.0.0.0` | Host address the port is published on. Use `127.0.0.1` behind a local reverse proxy (e.g. Tailscale Serve) |
 | `OLLAMA_URL` | `http://ollama:11434` | Where the dashboard reaches Ollama |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Which LLM to use for insights |
 | `OLLAMA_TIMEOUT` | `120` | Seconds to wait for a completion |
@@ -324,6 +325,8 @@ DASHBOARD_PORT=8080
 ```
 
 Then `docker compose up -d` and visit http://localhost:8080.
+
+If the error mentions `address already in use` and a reverse proxy such as Tailscale Serve already listens on that port on the same machine, publish the port on loopback only. Set `DASHBOARD_BIND=127.0.0.1` in `.env`, then run `docker compose up -d`.
 
 **🔴 Empty charts / "No data in the selected period"**
 
