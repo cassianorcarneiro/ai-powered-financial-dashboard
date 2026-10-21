@@ -767,6 +767,36 @@ def build_layout() -> html.Div:
                 className="text-center my-4 py-2",
                 style={"backgroundColor": config.bg, "color": config.accent},
             ),
+            # Fixed-position, auto-dismissing confirmation for a saved record.
+            # Lives outside the record modal on purpose: the modal closes on a
+            # successful edit (see save_record in app.py), so a message left
+            # inside it would close right along with it and never be seen.
+            dbc.Toast(
+                id="save-toast",
+                header="Success",
+                is_open=False,
+                dismissable=True,
+                duration=4000,
+                icon="success",
+                style={
+                    "position": "fixed",
+                    "top": "16px",
+                    "right": "16px",
+                    "zIndex": 2000,
+                    "minWidth": "280px",
+                    "backgroundColor": config.surface_raised,
+                    "border": f"1px solid {config.series_green}",
+                },
+                header_style={
+                    "backgroundColor": config.surface_raised,
+                    "color": config.text,
+                    "fontWeight": "bold",
+                },
+                body_style={
+                    "backgroundColor": config.surface_raised,
+                    "color": config.text,
+                },
+            ),
             dbc.Container(
                 [
                     dcc.Store(id="update-trigger", data=0),
@@ -880,7 +910,13 @@ def build_layout() -> html.Div:
                         dbc.Col(
                             dash_table.DataTable(
                                 id="table-data",
-                                columns=[{"name": c, "id": c} for c in TABLE_COLUMNS],
+                                # The Edit column's icon is self-explanatory, so
+                                # it gets no header text (an empty "name", not
+                                # the column id itself showing through).
+                                columns=[
+                                    {"name": "" if c == EDIT_COLUMN else c, "id": c}
+                                    for c in TABLE_COLUMNS
+                                ],
                                 data=[],
                                 page_size=20,
                                 style_table={
@@ -920,6 +956,18 @@ def build_layout() -> html.Div:
                                         "maxWidth": "36px",
                                         "width": "36px",
                                         "cursor": "pointer",
+                                    },
+                                ],
+                                # The Edit column is a constant glyph, not
+                                # filterable data; its filter cell is hidden
+                                # rather than removed, so the filter row's
+                                # column tracks stay aligned with the header
+                                # and data rows above and below it.
+                                style_filter_conditional=[
+                                    {
+                                        "if": {"column_id": EDIT_COLUMN},
+                                        "visibility": "hidden",
+                                        "pointerEvents": "none",
                                     },
                                 ],
                                 row_selectable="multi",

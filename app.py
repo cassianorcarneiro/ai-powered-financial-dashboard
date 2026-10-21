@@ -752,6 +752,7 @@ def _record_dropdown_options() -> tuple[list[dict], list[dict]]:
     Output("input-installments", "value", allow_duplicate=True),
     Output("input-payment-method", "value", allow_duplicate=True),
     Output("input-ignore", "value", allow_duplicate=True),
+    Output("record-feedback", "children", allow_duplicate=True),
     Input("open-modal", "n_clicks"),
     Input("btn-close", "n_clicks"),
     State("modal", "is_open"),
@@ -762,7 +763,9 @@ def toggle_record_modal(_open, _close, is_open):
 
     Always resets to "add new" mode, even if the modal was last left in "edit"
     mode by a cancelled edit: this is the only other way the modal opens, so
-    there's no case where an edit should still be in effect here.
+    there's no case where an edit should still be in effect here. Also clears
+    any leftover feedback message from a previous open, so closing and
+    reopening the modal doesn't leave a stale "Updated ..." alert on screen.
     """
     category_options, method_options = _record_dropdown_options()
     return (
@@ -779,6 +782,7 @@ def toggle_record_modal(_open, _close, is_open):
         1,
         None,
         False,
+        None,
     )
 
 
@@ -841,7 +845,11 @@ def open_edit_modal(active_cell, rows):
         purchase["installments"],
         purchase["payment_method"],
         purchase["ignore"],
-        no_update,
+        # Clears any leftover feedback from a previous save, same as
+        # toggle_record_modal does for the "add new" path -- otherwise a
+        # stale "Updated ..." alert from the last edit would still be
+        # showing the next time this modal opens.
+        None,
     )
 
 
@@ -861,6 +869,10 @@ def open_edit_modal(active_cell, rows):
     Output("editing-hash", "data", allow_duplicate=True),
     Output("modal-title", "children", allow_duplicate=True),
     Output("btn-save", "children", allow_duplicate=True),
+    Output("modal", "is_open", allow_duplicate=True),
+    Output("save-toast", "is_open", allow_duplicate=True),
+    Output("save-toast", "children", allow_duplicate=True),
+    Output("save-toast", "header", allow_duplicate=True),
     Input("btn-save", "n_clicks"),
     State("input-label", "value"),
     State("input-category", "value"),
@@ -886,6 +898,19 @@ def save_record(
     deleted one at a time -- see the "Regenerar tudo" choice this was built
     against. `editing_hash` absent means a normal new-purchase insert,
     unchanged from before.
+
+    The modal itself only closes on a successful edit. A successful insert
+    leaves it open, since adding several new records in a row is the whole
+    point of that flow; an edit targets one specific purchase, so there's
+    nothing left to do in the modal once it's saved. Either way, a
+    validation error keeps the modal open so the user can fix the field.
+
+    A validation or save error is shown inline, in `record-feedback`, since
+    the modal stays open for the user to correct it right there. A success
+    message instead goes to the `save-toast` popup outside the modal: an
+    insert leaves the modal open to show it alongside, but an edit closes
+    the modal on success, and a message written into `record-feedback` would
+    have closed along with it and never been seen.
     """
     missing = [
         name
@@ -902,24 +927,24 @@ def save_record(
         return (
             no_update,
             alert(f"Missing required field(s): {', '.join(missing)}."),
-            *[no_update] * 8,
+            *[no_update] * 13,
         )
 
     try:
         amount_value = parse_amount(amount)
     except ValueError:
-        return no_update, alert("Amount must be a number."), *[no_update] * 8
+        return no_update, alert("Amount must be a number."), *[no_update] * 13
 
     if amount_value == 0:
-        return no_update, alert("Amount cannot be zero."), *[no_update] * 8
+        return no_update, alert("Amount cannot be zero."), *[no_update] * 13
 
     try:
         installment_count = int(installments or 1)
     except (TypeError, ValueError):
-        return no_update, alert("Installments must be a whole number."), *[no_update] * 8
+        return no_update, alert("Installments must be a whole number."), *[no_update] * 13
 
     if installment_count < 1:
-        return no_update, alert("Installments must be at least 1."), *[no_update] * 8
+        return no_update, alert("Installments must be at least 1."), *[no_update] * 13
 
     try:
         records = generate_installments(
@@ -940,27 +965,31 @@ def save_record(
                 "Updated purchase %r: replaced %d old record(s) with %d new "
                 "record(s) for %r.", editing_hash, removed, len(records), label,
             )
-            message = alert(
+            toast_header = "Record updated"
+            toast_message = (
                 f"Updated '{label}': {removed} old record(s) replaced with "
-                f"{len(records)} new record(s).", color="success",
+                f"{len(records)} new record(s)."
             )
         else:
             append_transactions(records)
             logger.info("Inserted %d record(s) for %r.", len(records), label)
-            message = alert(
-                f"Added {len(records)} record(s) for '{label}'.", color="success"
-            )
+            toast_header = "Record added"
+            toast_message = f"Added {len(records)} record(s) for '{label}'."
     except (ValueError, KeyError) as exc:
         logger.error("Failed to save record: %s", exc)
-        return no_update, alert(str(exc)), *[no_update] * 8
+        return no_update, alert(str(exc)), *[no_update] * 13
 
     # Amount resets to "0.00" rather than blank so the mask has a value to
-    # build on from the first keystroke. Saving always returns the modal to
-    # "add new" mode, whichever mode it was in -- there is no reason to stay
-    # on the just-saved purchase.
+    # build on from the first keystroke. The fields and the "add new" mode
+    # reset regardless of which mode this save was, so a closed edit modal
+    # reopens clean and an open insert modal is ready for the next record.
+    # record-feedback is cleared (not reused for the success text) so it
+    # doesn't show a second, redundant copy of what the toast already says.
+    was_editing = bool(editing_hash)
     return (
-        (trigger_value or 0) + 1, message, "", None, None, "0.00", 1, False,
-        None, "New Record", "Save",
+        (trigger_value or 0) + 1, None, "", None, None, "0.00", 1, False,
+        None, "New Record", "Save", (not was_editing),
+        True, toast_message, toast_header,
     )
 
 
