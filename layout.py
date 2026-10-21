@@ -777,7 +777,6 @@ def build_layout() -> html.Div:
                 is_open=False,
                 dismissable=True,
                 duration=4000,
-                icon="success",
                 style={
                     "position": "fixed",
                     "top": "16px",
@@ -786,6 +785,12 @@ def build_layout() -> html.Div:
                     "minWidth": "280px",
                     "backgroundColor": config.surface_raised,
                     "border": f"1px solid {config.series_green}",
+                    "borderRadius": config.panel_radius,
+                    # header_style/body_style paint their own square-cornered
+                    # background over this rounded border; without clipping
+                    # them to it, the body's bottom corners show through as
+                    # sharp corners poking past the rounded outline.
+                    "overflow": "hidden",
                 },
                 header_style={
                     "backgroundColor": config.surface_raised,
