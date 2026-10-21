@@ -801,6 +801,7 @@ def toggle_record_modal(_open, _close, is_open):
     Output("input-payment-method", "value", allow_duplicate=True),
     Output("input-ignore", "value", allow_duplicate=True),
     Output("record-feedback", "children", allow_duplicate=True),
+    Output("table-data", "active_cell", allow_duplicate=True),
     Input("table-data", "active_cell"),
     State("table-data", "derived_virtual_data"),
     prevent_initial_call=True,
@@ -813,6 +814,13 @@ def open_edit_modal(active_cell, rows):
     active_cell's own column_id rather than by a separate button component --
     DataTable cells aren't real Dash components, so there is nothing else to
     attach a click handler to.
+
+    active_cell is reset back to None on every path out of here (other than
+    the two early PreventUpdate returns, which leave everything untouched).
+    Dash's Input only fires when a prop's value actually changes, so without
+    this a second click on the very same icon -- the single most likely next
+    thing to click -- would leave active_cell identical to what it already
+    was and silently do nothing.
     """
     if not active_cell or active_cell.get("column_id") != ui.EDIT_COLUMN:
         raise dash.exceptions.PreventUpdate
@@ -828,6 +836,7 @@ def open_edit_modal(active_cell, rows):
             no_update, no_update, no_update, no_update, no_update, no_update,
             no_update, no_update, no_update, no_update, no_update, no_update,
             alert("That record no longer exists; the table will refresh."),
+            None,
         )
 
     category_options, method_options = _record_dropdown_options()
@@ -849,6 +858,7 @@ def open_edit_modal(active_cell, rows):
         # toggle_record_modal does for the "add new" path -- otherwise a
         # stale "Updated ..." alert from the last edit would still be
         # showing the next time this modal opens.
+        None,
         None,
     )
 

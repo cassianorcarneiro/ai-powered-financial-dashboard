@@ -19,7 +19,7 @@
 (function () {
   "use strict";
 
-  var FIGURE_HEIGHT = 400;
+  var FIGURE_HEIGHT = 500;
 
   function syncSizes() {
     document.querySelectorAll(".js-plotly-plot").forEach(function (gd) {

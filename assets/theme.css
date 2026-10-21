@@ -99,6 +99,30 @@ select.form-select {
   color: #8A8A8A !important;
 }
 
+/* The Edit column's filter cell is hidden per-column from Python, via
+   style_filter_conditional in layout.py (that one has a documented column_id
+   hook; sorting doesn't). Its sort arrows have no such hook, so they're
+   hidden here instead, scoped by the DataTable's own data-dash-column
+   attribute rather than by column position -- a reorder of TABLE_COLUMNS
+   would leave this rule pointed at the right header regardless. */
+#table-data th[data-dash-column="Edit"] .column-header--sort {
+  display: none;
+}
+
+/* The active/focused-cell highlight (DataTable's own cell--selected /
+   focused classes) is suppressed table-wide, not just on Edit: clicking any
+   other cell does nothing in this app, so a highlight box left behind there
+   is visual noise with no meaning. The Edit icon's own cursor: pointer
+   (set in layout.py) and hover feedback are what signal it's clickable,
+   not this. Row selection for the delete buttons is a separate DataTable
+   feature (its own checkbox column) and is untouched by this rule. */
+#table-data .cell--selected,
+#table-data .focused {
+  outline: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 /* ---- Tooltips -------------------------------------------------------------- */
 .tooltip-inner {
   background-color: #1F1F1F;
