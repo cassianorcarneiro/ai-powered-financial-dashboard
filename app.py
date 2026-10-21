@@ -71,17 +71,27 @@ def compute_first_payment_date(
     base_date: datetime,
     method: dict[str, Any],
     method_name: str,
+    override_month: datetime | None = None,
 ) -> datetime:
     """Resolve when the first installment of a purchase is actually paid.
 
     For credit methods the answer depends on whether the purchase landed before
     or after the statement closed, and on whether the payment day falls before
     or after the close day within the month. Debit methods are paid immediately.
+
+    `override_month` lets the result be pinned by hand, for the statement-
+    boundary edge case where a purchase made right at the card's closing date
+    lands in a different cycle than this calculation assumes. Only its year
+    and month are used here; the day of month is still picked the normal way
+    (the card's payment day for Credit, the purchase's own day for Debit), so
+    overriding never requires the user to work out which exact day the card
+    bills on, only which month the statement actually fell in.
     """
     method_type = method["type"]
 
     if method_type == "Debit":
-        return base_date
+        target = override_month if override_month is not None else base_date
+        return _safe_replace_day(target, base_date.day)
 
     if method_type != "Credit":
         raise ValueError(f"Unknown payment method type: {method_type!r}")
@@ -93,13 +103,16 @@ def compute_first_payment_date(
             f"Credit method {method_name!r} is missing its close day or payment day."
         )
 
-    closed_already = base_date.day > close_day
-    # When the payment day precedes the close day it belongs to the following
-    # month's cycle, which shifts every case one month further out.
-    offset = 0 if payment_day > close_day else 1
-    offset += 1 if closed_already else 0
+    if override_month is not None:
+        target = override_month
+    else:
+        closed_already = base_date.day > close_day
+        # When the payment day precedes the close day it belongs to the
+        # following month's cycle, which shifts every case one month further.
+        offset = 0 if payment_day > close_day else 1
+        offset += 1 if closed_already else 0
+        target = base_date + relativedelta(months=offset)
 
-    target = base_date + relativedelta(months=offset)
     return _safe_replace_day(target, payment_day)
 
 
@@ -118,6 +131,7 @@ def generate_installments(
     payment_method_name: str,
     ignore: bool,
     transaction_hash: str | None = None,
+    payment_start_month: str | None = None,
 ) -> list[dict[str, Any]]:
     """Split a purchase into one record per installment.
 
@@ -129,13 +143,24 @@ def generate_installments(
     existing purchase passes its current Hash back in instead, so the
     regenerated installments replace the old ones under the same identity
     rather than appearing as an unrelated purchase.
+
+    `payment_start_month` is the optional manual override for the first
+    installment's payment month (see compute_first_payment_date), as a
+    DATE_FORMAT string -- the same shape the modal's date picker produces.
     """
     if installments < 1:
         raise ValueError("The number of installments must be at least 1.")
 
     method = get_payment_method(payment_method_name)
     base_date = datetime.strptime(date_str, DATE_FORMAT)
-    first_payment = compute_first_payment_date(base_date, method, payment_method_name)
+    override_month = (
+        datetime.strptime(payment_start_month, DATE_FORMAT)
+        if payment_start_month
+        else None
+    )
+    first_payment = compute_first_payment_date(
+        base_date, method, payment_method_name, override_month=override_month
+    )
 
     per_installment = round(total_amount / installments, 2)
     residue = round(total_amount - per_installment * installments, 2)
@@ -195,16 +220,51 @@ def load_purchase(hash_value: str) -> dict[str, Any] | None:
 
     first = rows.iloc[0]
     parsed = parse_installment(first["Installment"])
-    installment_count = parsed[1] if parsed else 1
+    installment_index, installment_count = parsed if parsed else (1, 1)
+
+    transaction_date = str(first["Transaction Date"])
+    payment_method_name = str(first["Payment Method"])
+
+    # The actual first-installment payment date, reconstructed the same way
+    # the total is: any surviving row's own Payment Date, shifted back by its
+    # own position in the schedule (generate_installments spaces installments
+    # exactly one month apart), lands on installment 1's date regardless of
+    # whether installment 1 itself is one of the rows still on disk.
+    surviving_payment_date = datetime.strptime(str(first["Payment Date"]), DATE_FORMAT)
+    actual_first_payment = surviving_payment_date - relativedelta(months=installment_index - 1)
+
+    # The override field is pre-filled only when this purchase's actual
+    # schedule disagrees with what today's automatic calculation would
+    # produce from its own date and payment method -- i.e. only when
+    # something (a prior manual override, or an edge case the formula
+    # doesn't model) already made this purchase a special case. An ordinary
+    # purchase edit -- fixing a label, say -- then leaves the field empty and
+    # the schedule free to recompute normally. A payment method that no
+    # longer exists can't be checked against, so the override is pre-filled
+    # unconditionally then, to avoid silently shifting a schedule that can't
+    # be verified.
+    payment_start_month: str | None
+    try:
+        method = get_payment_method(payment_method_name)
+        auto_first_payment = compute_first_payment_date(
+            datetime.strptime(transaction_date, DATE_FORMAT), method, payment_method_name
+        )
+        diverges = (auto_first_payment.year, auto_first_payment.month) != (
+            actual_first_payment.year, actual_first_payment.month,
+        )
+    except (KeyError, ValueError):
+        diverges = True
+    payment_start_month = actual_first_payment.strftime(DATE_FORMAT) if diverges else None
 
     return {
         "label": str(first["Label"]),
         "category": str(first["Category"]),
-        "transaction_date": str(first["Transaction Date"]),
+        "transaction_date": transaction_date,
         "amount": round(float(first["Amount"]) * installment_count, 2),
         "installments": installment_count,
-        "payment_method": str(first["Payment Method"]),
+        "payment_method": payment_method_name,
         "ignore": bool(int(first["Ignore Entry"])),
+        "payment_start_month": payment_start_month,
     }
 
 
@@ -753,6 +813,7 @@ def _record_dropdown_options() -> tuple[list[dict], list[dict]]:
     Output("input-payment-method", "value", allow_duplicate=True),
     Output("input-ignore", "value", allow_duplicate=True),
     Output("record-feedback", "children", allow_duplicate=True),
+    Output("input-payment-start-month", "date", allow_duplicate=True),
     Input("open-modal", "n_clicks"),
     Input("btn-close", "n_clicks"),
     State("modal", "is_open"),
@@ -766,6 +827,13 @@ def toggle_record_modal(_open, _close, is_open):
     there's no case where an edit should still be in effect here. Also clears
     any leftover feedback message from a previous open, so closing and
     reopening the modal doesn't leave a stale "Updated ..." alert on screen.
+
+    The payment-start-month override resets here too, even though save_record
+    deliberately leaves it alone between consecutive inserts (see there for
+    why): this is a fresh start (or a full stop, via Cancel), not "the next
+    purchase from the same statement", so there's no reason for a value typed
+    for one purchase -- or pre-filled by editing an unrelated one -- to carry
+    into whatever gets added next.
     """
     category_options, method_options = _record_dropdown_options()
     return (
@@ -782,6 +850,7 @@ def toggle_record_modal(_open, _close, is_open):
         1,
         None,
         False,
+        None,
         None,
     )
 
@@ -802,6 +871,7 @@ def toggle_record_modal(_open, _close, is_open):
     Output("input-ignore", "value", allow_duplicate=True),
     Output("record-feedback", "children", allow_duplicate=True),
     Output("table-data", "active_cell", allow_duplicate=True),
+    Output("input-payment-start-month", "date", allow_duplicate=True),
     Input("table-data", "active_cell"),
     State("table-data", "derived_virtual_data"),
     prevent_initial_call=True,
@@ -837,6 +907,7 @@ def open_edit_modal(active_cell, rows):
             no_update, no_update, no_update, no_update, no_update, no_update,
             alert("That record no longer exists; the table will refresh."),
             None,
+            no_update,
         )
 
     category_options, method_options = _record_dropdown_options()
@@ -860,6 +931,11 @@ def open_edit_modal(active_cell, rows):
         # showing the next time this modal opens.
         None,
         None,
+        # Pre-filled only when load_purchase found this purchase's actual
+        # schedule diverging from what today's automatic calculation would
+        # produce -- None otherwise, leaving the field empty and the
+        # schedule free to recompute normally on save.
+        purchase["payment_start_month"],
     )
 
 
@@ -891,13 +967,14 @@ def open_edit_modal(active_cell, rows):
     State("input-installments", "value"),
     State("input-payment-method", "value"),
     State("input-ignore", "value"),
+    State("input-payment-start-month", "date"),
     State("update-trigger", "data"),
     State("editing-hash", "data"),
     prevent_initial_call=True,
 )
 def save_record(
     _n_clicks, label, category, date_value, amount, installments,
-    payment_method, ignore, trigger_value, editing_hash,
+    payment_method, ignore, payment_start_month, trigger_value, editing_hash,
 ):
     """Validate the form, then either append a new purchase or replace one.
 
@@ -921,6 +998,16 @@ def save_record(
     insert leaves the modal open to show it alongside, but an edit closes
     the modal on success, and a message written into `record-feedback` would
     have closed along with it and never been seen.
+
+    `input-payment-start-month` is deliberately not one of this callback's
+    outputs, on any path -- it is the one field this callback never resets.
+    Several purchases from the same card statement can need the same manual
+    override in a row, and the insert flow's whole point is adding several
+    purchases without reopening the modal, so forcing it to be retyped for
+    each one would defeat that. toggle_record_modal and open_edit_modal
+    still control it on their own triggers (a fresh "add new" open, a Cancel,
+    or editing a specific purchase), so it never leaks from an edit or a
+    finished session into an unrelated next purchase; see their docstrings.
     """
     missing = [
         name
@@ -966,6 +1053,7 @@ def save_record(
             payment_method_name=str(payment_method),
             ignore=bool(ignore),
             transaction_hash=editing_hash,
+            payment_start_month=payment_start_month,
         )
         if editing_hash:
             removed = replace_transactions(

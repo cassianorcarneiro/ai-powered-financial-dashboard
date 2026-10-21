@@ -355,11 +355,22 @@ def _new_record_modal() -> dbc.Modal:
                         ],
                         className="mb-3",
                     ),
+                    dbc.Label("Payment Start Month (optional)"),
+                    _date_picker("input-payment-start-month", in_modal=True),
+                    dbc.FormText(
+                        "Overrides which month the first installment is paid. "
+                        "Use this only when a purchase made right at the card's "
+                        "closing date starts billing a month earlier or later "
+                        "than the automatic calculation below assumes. Only the "
+                        "month matters here; the exact day is still worked out "
+                        "automatically. Leave empty otherwise.",
+                        style={"color": config.text_muted},
+                    ),
                     dbc.Checkbox(
                         id="input-ignore",
                         label="Exclude this entry from charts and metrics",
                         value=False,
-                        className="mb-2",
+                        className="mb-2 mt-3",
                     ),
                     html.Div(id="record-feedback"),
                 ],
