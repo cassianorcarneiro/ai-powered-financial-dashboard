@@ -154,6 +154,32 @@ def delete_transactions(mask_fn) -> int:
         return removed
 
 
+def replace_transactions(mask_fn, new_records: list[dict]) -> int:
+    """Delete rows matching `mask_fn` and append `new_records`, atomically.
+
+    Used to edit an existing purchase: the caller regenerates the full
+    installment schedule from the edited fields and this swaps it in for
+    whatever currently matches `mask_fn` (typically "every row with this
+    Hash"). Doing the delete and the append under one lock acquisition,
+    rather than calling delete_transactions() then append_transactions() as
+    two separate locked operations, closes the window where another
+    callback's write could land between them and be silently discarded by
+    the second write's full-table overwrite.
+    """
+    with _WRITE_LOCK:
+        current = load_transactions()
+        if current.empty:
+            removed = 0
+            remaining = current
+        else:
+            mask = mask_fn(current)
+            removed = int(mask.sum())
+            remaining = current[~mask]
+        updated = pd.concat([remaining, pd.DataFrame(new_records)], ignore_index=True)
+        save_transactions(updated)
+        return removed
+
+
 # -----------------------------------------------------------------------------
 # Categories
 # -----------------------------------------------------------------------------

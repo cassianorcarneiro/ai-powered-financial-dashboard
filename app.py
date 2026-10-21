@@ -22,6 +22,7 @@ from typing import Any
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
+import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, callback_context, html, no_update
 from dateutil.relativedelta import relativedelta
 from flask import has_request_context, session
@@ -43,6 +44,7 @@ from storage import (
     load_categories,
     load_payment_methods,
     load_transactions,
+    replace_transactions,
     save_categories,
     save_payment_methods,
 )
@@ -115,12 +117,18 @@ def generate_installments(
     installments: int,
     payment_method_name: str,
     ignore: bool,
+    transaction_hash: str | None = None,
 ) -> list[dict[str, Any]]:
     """Split a purchase into one record per installment.
 
     The sign of `total_amount` is preserved, so expenses stay negative. Rounding
     residue from the division is added to the final installment, which keeps the
     sum of the parts exactly equal to the original amount.
+
+    `transaction_hash` defaults to a fresh id for a new purchase. Editing an
+    existing purchase passes its current Hash back in instead, so the
+    regenerated installments replace the old ones under the same identity
+    rather than appearing as an unrelated purchase.
     """
     if installments < 1:
         raise ValueError("The number of installments must be at least 1.")
@@ -132,7 +140,7 @@ def generate_installments(
     per_installment = round(total_amount / installments, 2)
     residue = round(total_amount - per_installment * installments, 2)
 
-    transaction_hash = str(uuid.uuid4())
+    transaction_hash = transaction_hash or str(uuid.uuid4())
     recorded_at = datetime.now().strftime(TIMESTAMP_FORMAT)
 
     # relativedelta already clamps to the last valid day of a short month, so
@@ -157,6 +165,47 @@ def generate_installments(
             }
         )
     return records
+
+
+def load_purchase(hash_value: str) -> dict[str, Any] | None:
+    """Reconstruct a purchase's original form-field values from storage.
+
+    The table shows one row per installment: a per-installment Amount and an
+    "index/total" Installment marker, never the total the user originally
+    typed. Pre-filling the edit modal needs that original total and the
+    original installment count back, not what any single surviving row
+    displays.
+
+    This reads every row still on disk for `hash_value`, not just the ones
+    currently visible in the table, because the table's date filter can hide
+    some of a purchase's installments without hiding the purchase itself.
+    One surviving row is enough to reconstruct the total: multiplying its own
+    Amount by the installment count embedded in its own marker reproduces the
+    original total regardless of which installments happen to still exist.
+    This is the same reconstruction `charts.purchase_totals_by_month` uses,
+    applied to a single purchase instead of a whole month.
+
+    Returns None if no row with this Hash exists any more (the purchase was
+    deleted by another callback between the table render and this click).
+    """
+    df = load_transactions()
+    rows = df[df["Hash"] == hash_value]
+    if rows.empty:
+        return None
+
+    first = rows.iloc[0]
+    parsed = parse_installment(first["Installment"])
+    installment_count = parsed[1] if parsed else 1
+
+    return {
+        "label": str(first["Label"]),
+        "category": str(first["Category"]),
+        "transaction_date": str(first["Transaction Date"]),
+        "amount": round(float(first["Amount"]) * installment_count, 2),
+        "installments": installment_count,
+        "payment_method": str(first["Payment Method"]),
+        "ignore": bool(int(first["Ignore Entry"])),
+    }
 
 
 # -----------------------------------------------------------------------------
@@ -243,6 +292,10 @@ def build_table_records(
     # Two decimals, no thousands separator: the grouping comma reads as a decimal
     # mark in most of the world, so in a table of bare numbers it is ambiguous.
     view["Amount"] = view["Amount"].map(lambda v: f"{v:.2f}")
+    # Constant glyph, not derived from the row: clicking it is what the
+    # "open-edit-modal" callback below listens for, via active_cell's
+    # column_id. It carries no data of its own.
+    view[ui.EDIT_COLUMN] = ui.EDIT_ICON
 
     return view[ui.TABLE_COLUMNS + [_ISO_DATE_KEY, _HASH_KEY]].to_dict("records")
 
@@ -677,21 +730,118 @@ def manage_categories(_open, _close, _save, _add, _deletes, is_open, names):
 # Callbacks: new record modal
 # -----------------------------------------------------------------------------
 
+def _record_dropdown_options() -> tuple[list[dict], list[dict]]:
+    """Fresh (category, payment method) dropdown options for the record modal."""
+    return (
+        [{"label": c, "value": c} for c in get_categories()],
+        [{"label": m, "value": m} for m in get_payment_methods()],
+    )
+
+
 @app.callback(
     Output("modal", "is_open"),
     Output("input-category", "options", allow_duplicate=True),
     Output("input-payment-method", "options", allow_duplicate=True),
+    Output("modal-title", "children", allow_duplicate=True),
+    Output("btn-save", "children", allow_duplicate=True),
+    Output("editing-hash", "data", allow_duplicate=True),
+    Output("input-label", "value", allow_duplicate=True),
+    Output("input-category", "value", allow_duplicate=True),
+    Output("input-date", "date", allow_duplicate=True),
+    Output("input-amount", "value", allow_duplicate=True),
+    Output("input-installments", "value", allow_duplicate=True),
+    Output("input-payment-method", "value", allow_duplicate=True),
+    Output("input-ignore", "value", allow_duplicate=True),
     Input("open-modal", "n_clicks"),
     Input("btn-close", "n_clicks"),
     State("modal", "is_open"),
     prevent_initial_call=True,
 )
 def toggle_record_modal(_open, _close, is_open):
-    """Toggle the record modal, refreshing both dropdowns each time it opens."""
+    """Toggle the record modal for a brand new record.
+
+    Always resets to "add new" mode, even if the modal was last left in "edit"
+    mode by a cancelled edit: this is the only other way the modal opens, so
+    there's no case where an edit should still be in effect here.
+    """
+    category_options, method_options = _record_dropdown_options()
     return (
         (not is_open),
-        [{"label": c, "value": c} for c in get_categories()],
-        [{"label": m, "value": m} for m in get_payment_methods()],
+        category_options,
+        method_options,
+        "New Record",
+        "Save",
+        None,
+        "",
+        None,
+        None,
+        "0.00",
+        1,
+        None,
+        False,
+    )
+
+
+@app.callback(
+    Output("modal", "is_open", allow_duplicate=True),
+    Output("input-category", "options", allow_duplicate=True),
+    Output("input-payment-method", "options", allow_duplicate=True),
+    Output("modal-title", "children", allow_duplicate=True),
+    Output("btn-save", "children", allow_duplicate=True),
+    Output("editing-hash", "data", allow_duplicate=True),
+    Output("input-label", "value", allow_duplicate=True),
+    Output("input-category", "value", allow_duplicate=True),
+    Output("input-date", "date", allow_duplicate=True),
+    Output("input-amount", "value", allow_duplicate=True),
+    Output("input-installments", "value", allow_duplicate=True),
+    Output("input-payment-method", "value", allow_duplicate=True),
+    Output("input-ignore", "value", allow_duplicate=True),
+    Output("record-feedback", "children", allow_duplicate=True),
+    Input("table-data", "active_cell"),
+    State("table-data", "derived_virtual_data"),
+    prevent_initial_call=True,
+)
+def open_edit_modal(active_cell, rows):
+    """Open the record modal pre-filled with an existing purchase.
+
+    Triggers only on a click in the Edit column specifically (every other
+    column click leaves active_cell set but is ignored here), identified by
+    active_cell's own column_id rather than by a separate button component --
+    DataTable cells aren't real Dash components, so there is nothing else to
+    attach a click handler to.
+    """
+    if not active_cell or active_cell.get("column_id") != ui.EDIT_COLUMN:
+        raise dash.exceptions.PreventUpdate
+
+    row_index = active_cell["row"]
+    if not rows or row_index >= len(rows):
+        raise dash.exceptions.PreventUpdate
+
+    hash_value = rows[row_index][_HASH_KEY]
+    purchase = load_purchase(hash_value)
+    if purchase is None:
+        return (
+            no_update, no_update, no_update, no_update, no_update, no_update,
+            no_update, no_update, no_update, no_update, no_update, no_update,
+            alert("That record no longer exists; the table will refresh."),
+        )
+
+    category_options, method_options = _record_dropdown_options()
+    return (
+        True,
+        category_options,
+        method_options,
+        "Edit Record",
+        "Save changes",
+        hash_value,
+        purchase["label"],
+        purchase["category"],
+        purchase["transaction_date"],
+        f"{purchase['amount']:.2f}",
+        purchase["installments"],
+        purchase["payment_method"],
+        purchase["ignore"],
+        no_update,
     )
 
 
@@ -708,6 +858,9 @@ def toggle_record_modal(_open, _close, is_open):
     Output("input-amount", "value"),
     Output("input-installments", "value"),
     Output("input-ignore", "value"),
+    Output("editing-hash", "data", allow_duplicate=True),
+    Output("modal-title", "children", allow_duplicate=True),
+    Output("btn-save", "children", allow_duplicate=True),
     Input("btn-save", "n_clicks"),
     State("input-label", "value"),
     State("input-category", "value"),
@@ -717,13 +870,23 @@ def toggle_record_modal(_open, _close, is_open):
     State("input-payment-method", "value"),
     State("input-ignore", "value"),
     State("update-trigger", "data"),
+    State("editing-hash", "data"),
     prevent_initial_call=True,
 )
-def insert_record(
+def save_record(
     _n_clicks, label, category, date_value, amount, installments,
-    payment_method, ignore, trigger_value,
+    payment_method, ignore, trigger_value, editing_hash,
 ):
-    """Validate the form and append the resulting installment records."""
+    """Validate the form, then either append a new purchase or replace one.
+
+    `editing_hash` set (from the Edit-column click) means this is a
+    correction: every existing row for that Hash is deleted and the full
+    installment schedule is regenerated under the same Hash from the edited
+    fields. This intentionally regenerates installments that were previously
+    deleted one at a time -- see the "Regenerar tudo" choice this was built
+    against. `editing_hash` absent means a normal new-purchase insert,
+    unchanged from before.
+    """
     missing = [
         name
         for name, value in (
@@ -739,24 +902,24 @@ def insert_record(
         return (
             no_update,
             alert(f"Missing required field(s): {', '.join(missing)}."),
-            *[no_update] * 6,
+            *[no_update] * 8,
         )
 
     try:
         amount_value = parse_amount(amount)
     except ValueError:
-        return no_update, alert("Amount must be a number."), *[no_update] * 6
+        return no_update, alert("Amount must be a number."), *[no_update] * 8
 
     if amount_value == 0:
-        return no_update, alert("Amount cannot be zero."), *[no_update] * 6
+        return no_update, alert("Amount cannot be zero."), *[no_update] * 8
 
     try:
         installment_count = int(installments or 1)
     except (TypeError, ValueError):
-        return no_update, alert("Installments must be a whole number."), *[no_update] * 6
+        return no_update, alert("Installments must be a whole number."), *[no_update] * 8
 
     if installment_count < 1:
-        return no_update, alert("Installments must be at least 1."), *[no_update] * 6
+        return no_update, alert("Installments must be at least 1."), *[no_update] * 8
 
     try:
         records = generate_installments(
@@ -767,19 +930,38 @@ def insert_record(
             installments=installment_count,
             payment_method_name=str(payment_method),
             ignore=bool(ignore),
+            transaction_hash=editing_hash,
         )
-        append_transactions(records)
+        if editing_hash:
+            removed = replace_transactions(
+                lambda df: df["Hash"] == editing_hash, records
+            )
+            logger.info(
+                "Updated purchase %r: replaced %d old record(s) with %d new "
+                "record(s) for %r.", editing_hash, removed, len(records), label,
+            )
+            message = alert(
+                f"Updated '{label}': {removed} old record(s) replaced with "
+                f"{len(records)} new record(s).", color="success",
+            )
+        else:
+            append_transactions(records)
+            logger.info("Inserted %d record(s) for %r.", len(records), label)
+            message = alert(
+                f"Added {len(records)} record(s) for '{label}'.", color="success"
+            )
     except (ValueError, KeyError) as exc:
-        logger.error("Failed to insert record: %s", exc)
-        return no_update, alert(str(exc)), *[no_update] * 6
+        logger.error("Failed to save record: %s", exc)
+        return no_update, alert(str(exc)), *[no_update] * 8
 
-    logger.info("Inserted %d record(s) for %r.", len(records), label)
-    message = alert(
-        f"Added {len(records)} record(s) for '{label}'.", color="success"
+    # Amount resets to "0.00" rather than blank so the mask has a value to
+    # build on from the first keystroke. Saving always returns the modal to
+    # "add new" mode, whichever mode it was in -- there is no reason to stay
+    # on the just-saved purchase.
+    return (
+        (trigger_value or 0) + 1, message, "", None, None, "0.00", 1, False,
+        None, "New Record", "Save",
     )
-    # Amount resets to "0.00" rather than blank so the mask has a value to build
-    # on from the first keystroke.
-    return (trigger_value or 0) + 1, message, "", None, None, "0.00", 1, False
 
 
 @app.callback(

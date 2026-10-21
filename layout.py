@@ -70,7 +70,15 @@ MODAL_BODY_STYLE = {
     "fontSize": config.fontsize_1,
 }
 
+# A fixed glyph, not a real data field. app.py stamps this value onto every
+# row; clicking that cell is what tells the "open edit modal" callback which
+# row was meant, via DataTable's own active_cell prop. Kept first so it reads
+# as a row action, not one more data column to scan past.
+EDIT_COLUMN = "Edit"
+EDIT_ICON = "✏️"  # pencil
+
 TABLE_COLUMNS = [
+    EDIT_COLUMN,
     "Record Timestamp",
     "Transaction Date",
     "Payment Date",
@@ -258,7 +266,9 @@ def _new_record_modal() -> dbc.Modal:
     methods = list(get_payment_methods().keys())
     return dbc.Modal(
         [
-            dbc.ModalHeader("New Record", style=MODAL_HEADER_STYLE),
+            dbc.ModalHeader(
+                html.Span("New Record", id="modal-title"), style=MODAL_HEADER_STYLE
+            ),
             dbc.ModalBody(
                 [
                     dbc.Alert(
@@ -760,6 +770,12 @@ def build_layout() -> html.Div:
             dbc.Container(
                 [
                     dcc.Store(id="update-trigger", data=0),
+                    # Hash of the purchase currently being edited, or None when
+                    # the modal is in "add a new record" mode. The same modal
+                    # and the same input IDs serve both; this is what the save
+                    # callback checks to decide whether to append a new
+                    # purchase or replace an existing one.
+                    dcc.Store(id="editing-hash", data=None),
                     dbc.Row(dbc.Col(_ai_card(), width=12), className="mb-4"),
                     dbc.Row(
                         dbc.Col(_filters(start_date, end_date), width=12),
@@ -866,7 +882,7 @@ def build_layout() -> html.Div:
                                 id="table-data",
                                 columns=[{"name": c, "id": c} for c in TABLE_COLUMNS],
                                 data=[],
-                                page_size=30,
+                                page_size=20,
                                 style_table={
                                     "overflowX": "auto",
                                     "minWidth": "100%",
@@ -893,6 +909,19 @@ def build_layout() -> html.Div:
                                     "whiteSpace": "normal",
                                     "fontSize": config.fontsize_1,
                                 },
+                                # The Edit column holds one constant glyph, not
+                                # data to scan, so it gets a narrow fixed width
+                                # and a pointer cursor instead of the 100px
+                                # data-column minimum every other column uses.
+                                style_cell_conditional=[
+                                    {
+                                        "if": {"column_id": EDIT_COLUMN},
+                                        "minWidth": "36px",
+                                        "maxWidth": "36px",
+                                        "width": "36px",
+                                        "cursor": "pointer",
+                                    },
+                                ],
                                 row_selectable="multi",
                                 selected_rows=[],
                                 # Server-side: sorting the rendered dd/mm/yyyy
@@ -903,6 +932,10 @@ def build_layout() -> html.Div:
                                 filter_action="native",
                                 page_action="native",
                                 editable=False,
+                                # None until a cell is clicked; the open-edit
+                                # callback reads this to find which row and
+                                # whether it was the Edit column specifically.
+                                active_cell=None,
                             ),
                             width=12,
                         ),
