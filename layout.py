@@ -866,7 +866,7 @@ def build_layout() -> html.Div:
                                 id="table-data",
                                 columns=[{"name": c, "id": c} for c in TABLE_COLUMNS],
                                 data=[],
-                                page_size=20,
+                                page_size=30,
                                 style_table={
                                     "overflowX": "auto",
                                     "minWidth": "100%",

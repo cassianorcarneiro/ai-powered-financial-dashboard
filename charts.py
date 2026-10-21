@@ -31,7 +31,7 @@ _PASTEL_PALETTE: list[str] = list(px.colors.qualitative.Pastel) + list(px.colors
 # nothing recomputes it. Width responsiveness now comes only from
 # assets/chart-resize.js calling Plotly.relayout with an explicit width — a
 # narrower operation than the resize/autosize path that was corrupting height.
-FIGURE_HEIGHT = 400
+FIGURE_HEIGHT = 500
 
 # Plotly's `separators` takes the decimal mark followed by the thousands mark.
 # Passing only "." leaves the thousands group empty, so axis ticks and hover
@@ -225,8 +225,53 @@ def monthly_bar(
     return _apply_common_layout(fig)
 
 
+# Both pie charts share this cap: past PIE_MAX_SLICES kept categories, the
+# rest are summed into one PIE_OTHER_LABEL slice (see _bucket_small_slices).
+# The label is in English regardless of the UI language, matching every
+# other identifier in this codebase.
+PIE_MAX_SLICES = 6
+PIE_OTHER_LABEL = "Other categories"
+
+
+def _bucket_small_slices(grouped: pd.DataFrame, group_column: str, max_slices: int) -> pd.DataFrame:
+    """Collapse every slice past `max_slices` into one aggregate "Other" row.
+
+    A pie's own legibility, not an arbitrary taste call, sets `max_slices`:
+    outside labels start overlapping well before a dozen categories, and
+    beyond roughly 7-8 simultaneous colors a reader can no longer match a
+    slice back to its legend entry regardless of label placement. Bucketing
+    only triggers once there are more rows than `max_slices + 1`, so a
+    distribution that already fits under the cap is left exactly as grouped
+    -- collapsing a single tail row into "Other" would rename it for no
+    reduction in slice count.
+    """
+    if len(grouped) <= max_slices + 1:
+        return grouped
+
+    ranked = grouped.sort_values("Amount", ascending=False).reset_index(drop=True)
+    kept = ranked.iloc[:max_slices]
+    tail = ranked.iloc[max_slices:]
+
+    # If a real category in `kept` is already named exactly like the bucket
+    # (e.g. a pre-existing "Other categories" entry large enough to survive
+    # the cut on its own), the aggregate row below would collide with it and
+    # silently merge two distinct totals under one slice. Falling back to a
+    # visibly different label avoids that merge without needing the caller
+    # to know anything about the data's own category names.
+    other_label = PIE_OTHER_LABEL
+    if other_label in set(kept[group_column]):
+        other_label = "Remaining categories"
+
+    other_row = pd.DataFrame({group_column: [other_label], "Amount": [tail["Amount"].sum()]})
+    return pd.concat([kept, other_row], ignore_index=True)
+
+
 def share_pie(df: pd.DataFrame, group_column: str, title: str) -> go.Figure:
-    """Render the share of total expenses per value of `group_column`."""
+    """Render the share of total expenses per value of `group_column`.
+
+    Limited to the `PIE_MAX_SLICES` largest values plus one aggregate
+    "Other categories" slice -- see `_bucket_small_slices`.
+    """
     if df.empty or group_column not in df.columns:
         return empty_figure()
 
@@ -234,6 +279,8 @@ def share_pie(df: pd.DataFrame, group_column: str, title: str) -> go.Figure:
     grouped = grouped[grouped["Amount"] > 0]
     if grouped.empty:
         return empty_figure()
+
+    grouped = _bucket_small_slices(grouped, group_column, PIE_MAX_SLICES)
 
     fig = px.pie(
         grouped,
