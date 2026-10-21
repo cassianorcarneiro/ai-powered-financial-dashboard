@@ -241,12 +241,19 @@ def _bucket_small_slices(grouped: pd.DataFrame, group_column: str, max_slices: i
     beyond roughly 7-8 simultaneous colors a reader can no longer match a
     slice back to its legend entry regardless of label placement. Bucketing
     only triggers once there are more rows than `max_slices + 1`, so a
-    distribution that already fits under the cap is left exactly as grouped
-    -- collapsing a single tail row into "Other" would rename it for no
-    reduction in slice count.
+    distribution that already fits under the cap is left with its slices in
+    descending order and no row added -- collapsing a single tail row into
+    "Other" would rename it for no reduction in slice count.
+
+    Row order matters here, not just for readability: `share_pie` turns off
+    Plotly's own value-sort (`sort=False` on the trace) specifically so the
+    aggregate row this function appends last stays last on screen. Returning
+    rows in any other order -- alphabetical from the caller's groupby, or
+    re-sorted after the aggregate row is appended -- would carry straight
+    through to the rendered legend.
     """
     if len(grouped) <= max_slices + 1:
-        return grouped
+        return grouped.sort_values("Amount", ascending=False).reset_index(drop=True)
 
     ranked = grouped.sort_values("Amount", ascending=False).reset_index(drop=True)
     kept = ranked.iloc[:max_slices]
@@ -292,6 +299,14 @@ def share_pie(df: pd.DataFrame, group_column: str, title: str) -> go.Figure:
     fig.update_traces(
         textposition="outside",
         textinfo="percent+label",
+        # Plotly.js sorts pie slices (and the legend) by value descending by
+        # default, regardless of the order rows are fed in. Left on, that
+        # default would reorder the "Other categories" aggregate ahead of
+        # any kept slice smaller than it -- which is routine, since it sums
+        # every slice too small to keep. `sort=False` makes the trace render
+        # in exactly the row order `grouped` arrives in, which is what keeps
+        # that aggregate slice fixed at the end.
+        sort=False,
         # Lets Plotly expand the figure's margins if an outside label would
         # otherwise be clipped. A constrained `domain` was tried here to force
         # extra clearance from the title above, but it wasn't the fix: the
