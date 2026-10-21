@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import calendar
 from datetime import date
 
 import dash_bootstrap_components as dbc
@@ -356,14 +357,26 @@ def _new_record_modal() -> dbc.Modal:
                         className="mb-3",
                     ),
                     dbc.Label("Payment Start Month (optional)"),
-                    _date_picker("input-payment-start-month", in_modal=True),
+                    dbc.Select(
+                        id="input-payment-start-month",
+                        options=[{"label": "Automatic (recommended)", "value": ""}]
+                        + [
+                            {"label": calendar.month_name[m], "value": str(m)}
+                            for m in range(1, 13)
+                        ],
+                        value="",
+                    ),
                     dbc.FormText(
                         "Overrides which month the first installment is paid. "
                         "Use this only when a purchase made right at the card's "
                         "closing date starts billing a month earlier or later "
-                        "than the automatic calculation below assumes. Only the "
-                        "month matters here; the exact day is still worked out "
-                        "automatically. Leave empty otherwise.",
+                        "than the automatic calculation assumes. Pick just the "
+                        "month: the year is worked out automatically as "
+                        "whichever one lands closest to the automatic "
+                        "calculation (so picking January when the automatic "
+                        "result was December means next January, and picking "
+                        "December when the automatic result was January means "
+                        "last December). Leave as Automatic otherwise.",
                         style={"color": config.text_muted},
                     ),
                     dbc.Checkbox(

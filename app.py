@@ -67,11 +67,32 @@ _HASH_KEY = "_hash"
 # Record generation
 # -----------------------------------------------------------------------------
 
+def _nearest_year_for_month(reference: datetime, month: int) -> int:
+    """Pick the calendar year that puts `month` closest to `reference`.
+
+    A bare month number is ambiguous at a year boundary: if the automatic
+    calculation lands on December 2026 and the override says "January", the
+    intended January is 2027 (one month later), not 2026 (eleven months
+    earlier) -- and the reverse holds for a reference of January 2027 with
+    an override of December. Checking `reference`'s own year plus the one
+    before and after, and keeping whichever puts `month` fewest months away,
+    covers both directions with one rule; the reference and its override are
+    always close enough in practice (a statement-boundary slip is never more
+    than a month or two) that a one-year window is more than enough.
+    """
+    reference_index = reference.year * 12 + (reference.month - 1)
+    candidate_years = (reference.year - 1, reference.year, reference.year + 1)
+    return min(
+        candidate_years,
+        key=lambda year: abs((year * 12 + (month - 1)) - reference_index),
+    )
+
+
 def compute_first_payment_date(
     base_date: datetime,
     method: dict[str, Any],
     method_name: str,
-    override_month: datetime | None = None,
+    override_month: int | None = None,
 ) -> datetime:
     """Resolve when the first installment of a purchase is actually paid.
 
@@ -81,39 +102,47 @@ def compute_first_payment_date(
 
     `override_month` lets the result be pinned by hand, for the statement-
     boundary edge case where a purchase made right at the card's closing date
-    lands in a different cycle than this calculation assumes. Only its year
-    and month are used here; the day of month is still picked the normal way
-    (the card's payment day for Credit, the purchase's own day for Debit), so
-    overriding never requires the user to work out which exact day the card
-    bills on, only which month the statement actually fell in.
+    lands in a different cycle than this calculation assumes. It is a bare
+    month number (1-12), with no year attached -- the automatic calculation
+    below still runs first to establish `target`, and the override only
+    replaces its month, with the year resolved by _nearest_year_for_month
+    against that automatic result. The day of month is untouched either way,
+    picked the normal way (the card's payment day for Credit, the purchase's
+    own day for Debit), so overriding never requires the user to work out
+    which exact day the card bills on, only which month it fell in.
     """
     method_type = method["type"]
 
     if method_type == "Debit":
-        target = override_month if override_month is not None else base_date
-        return _safe_replace_day(target, base_date.day)
+        target = base_date
+        day = base_date.day
+    elif method_type == "Credit":
+        close_day = method["statement_close_day"]
+        payment_day = method["payment_day"]
+        if close_day is None or payment_day is None:
+            raise ValueError(
+                f"Credit method {method_name!r} is missing its close day or payment day."
+            )
 
-    if method_type != "Credit":
-        raise ValueError(f"Unknown payment method type: {method_type!r}")
-
-    close_day = method["statement_close_day"]
-    payment_day = method["payment_day"]
-    if close_day is None or payment_day is None:
-        raise ValueError(
-            f"Credit method {method_name!r} is missing its close day or payment day."
-        )
-
-    if override_month is not None:
-        target = override_month
-    else:
         closed_already = base_date.day > close_day
         # When the payment day precedes the close day it belongs to the
         # following month's cycle, which shifts every case one month further.
         offset = 0 if payment_day > close_day else 1
         offset += 1 if closed_already else 0
         target = base_date + relativedelta(months=offset)
+        day = payment_day
+    else:
+        raise ValueError(f"Unknown payment method type: {method_type!r}")
 
-    return _safe_replace_day(target, payment_day)
+    if override_month is not None:
+        year = _nearest_year_for_month(target, override_month)
+        # day=1 first: replacing only `month` on a day-31 target against a
+        # shorter override month (e.g. target day 31, override month
+        # February) would otherwise raise "day is out of range for month".
+        # _safe_replace_day below sets the real day once the month is safe.
+        target = target.replace(year=year, month=override_month, day=1)
+
+    return _safe_replace_day(target, day)
 
 
 def _safe_replace_day(moment: datetime, day: int) -> datetime:
@@ -131,7 +160,7 @@ def generate_installments(
     payment_method_name: str,
     ignore: bool,
     transaction_hash: str | None = None,
-    payment_start_month: str | None = None,
+    payment_start_month: int | None = None,
 ) -> list[dict[str, Any]]:
     """Split a purchase into one record per installment.
 
@@ -145,21 +174,17 @@ def generate_installments(
     rather than appearing as an unrelated purchase.
 
     `payment_start_month` is the optional manual override for the first
-    installment's payment month (see compute_first_payment_date), as a
-    DATE_FORMAT string -- the same shape the modal's date picker produces.
+    installment's payment month (see compute_first_payment_date): a bare
+    month number, 1-12, with the year resolved automatically. None means no
+    override, the ordinary case.
     """
     if installments < 1:
         raise ValueError("The number of installments must be at least 1.")
 
     method = get_payment_method(payment_method_name)
     base_date = datetime.strptime(date_str, DATE_FORMAT)
-    override_month = (
-        datetime.strptime(payment_start_month, DATE_FORMAT)
-        if payment_start_month
-        else None
-    )
     first_payment = compute_first_payment_date(
-        base_date, method, payment_method_name, override_month=override_month
+        base_date, method, payment_method_name, override_month=payment_start_month
     )
 
     per_installment = round(total_amount / installments, 2)
@@ -243,7 +268,6 @@ def load_purchase(hash_value: str) -> dict[str, Any] | None:
     # longer exists can't be checked against, so the override is pre-filled
     # unconditionally then, to avoid silently shifting a schedule that can't
     # be verified.
-    payment_start_month: str | None
     try:
         method = get_payment_method(payment_method_name)
         auto_first_payment = compute_first_payment_date(
@@ -254,7 +278,11 @@ def load_purchase(hash_value: str) -> dict[str, Any] | None:
         )
     except (KeyError, ValueError):
         diverges = True
-    payment_start_month = actual_first_payment.strftime(DATE_FORMAT) if diverges else None
+    # The Select's options carry string values ("1".."12", or "" for the
+    # blank "Automatic" choice), and this is fed straight into that field's
+    # `value` by open_edit_modal -- an int here would simply match none of
+    # the options and leave the control showing blank.
+    payment_start_month = str(actual_first_payment.month) if diverges else ""
 
     return {
         "label": str(first["Label"]),
@@ -813,7 +841,7 @@ def _record_dropdown_options() -> tuple[list[dict], list[dict]]:
     Output("input-payment-method", "value", allow_duplicate=True),
     Output("input-ignore", "value", allow_duplicate=True),
     Output("record-feedback", "children", allow_duplicate=True),
-    Output("input-payment-start-month", "date", allow_duplicate=True),
+    Output("input-payment-start-month", "value", allow_duplicate=True),
     Input("open-modal", "n_clicks"),
     Input("btn-close", "n_clicks"),
     State("modal", "is_open"),
@@ -851,7 +879,7 @@ def toggle_record_modal(_open, _close, is_open):
         None,
         False,
         None,
-        None,
+        "",
     )
 
 
@@ -871,7 +899,7 @@ def toggle_record_modal(_open, _close, is_open):
     Output("input-ignore", "value", allow_duplicate=True),
     Output("record-feedback", "children", allow_duplicate=True),
     Output("table-data", "active_cell", allow_duplicate=True),
-    Output("input-payment-start-month", "date", allow_duplicate=True),
+    Output("input-payment-start-month", "value", allow_duplicate=True),
     Input("table-data", "active_cell"),
     State("table-data", "derived_virtual_data"),
     prevent_initial_call=True,
@@ -907,6 +935,7 @@ def open_edit_modal(active_cell, rows):
             no_update, no_update, no_update, no_update, no_update, no_update,
             alert("That record no longer exists; the table will refresh."),
             None,
+            no_update,
             no_update,
         )
 
@@ -967,7 +996,7 @@ def open_edit_modal(active_cell, rows):
     State("input-installments", "value"),
     State("input-payment-method", "value"),
     State("input-ignore", "value"),
-    State("input-payment-start-month", "date"),
+    State("input-payment-start-month", "value"),
     State("update-trigger", "data"),
     State("editing-hash", "data"),
     prevent_initial_call=True,
@@ -1042,6 +1071,16 @@ def save_record(
 
     if installment_count < 1:
         return no_update, alert("Installments must be at least 1."), *[no_update] * 13
+
+    # The Select's blank "Automatic" option carries value "" -- falsy, but
+    # "" is not None, so compute_first_payment_date's `if override_month is
+    # not None` check would wrongly treat it as a real override without this
+    # conversion. A filled option carries the month as a string ("1".."12"),
+    # which still needs casting to int before it reaches date arithmetic.
+    try:
+        payment_start_month = int(payment_start_month) if payment_start_month else None
+    except (TypeError, ValueError):
+        return no_update, alert("Payment Start Month is invalid."), *[no_update] * 13
 
     try:
         records = generate_installments(
