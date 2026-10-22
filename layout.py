@@ -1003,6 +1003,28 @@ def build_layout() -> html.Div:
                                         "cursor": "pointer",
                                     },
                                 ],
+                                # Amount is coloured by sign, using the same
+                                # pastel red and green as the chart series so
+                                # expenses and income read alike everywhere.
+                                # The minus sign is still in the text, so the
+                                # colour reinforces the sign rather than being
+                                # the only thing that carries it.
+                                style_data_conditional=[
+                                    {
+                                        "if": {
+                                            "column_id": "Amount",
+                                            "filter_query": "{Amount} < 0",
+                                        },
+                                        "color": config.series_red,
+                                    },
+                                    {
+                                        "if": {
+                                            "column_id": "Amount",
+                                            "filter_query": "{Amount} > 0",
+                                        },
+                                        "color": config.series_green,
+                                    },
+                                ],
                                 # The Edit column is a constant glyph, not
                                 # filterable data; its filter cell is hidden
                                 # rather than removed, so the filter row's
