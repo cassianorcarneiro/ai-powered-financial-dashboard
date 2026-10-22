@@ -9,8 +9,8 @@
    component and the Dash callback in agreement.
 
    Everything here is progressive enhancement. If this file fails to load, the
-   date field still works through its calendar and the amount field accepts a
-   plain typed number such as -123.45.
+   date field still accepts a full date typed by hand as DD/MM/YYYY and the
+   amount field accepts a plain typed number such as -123.45.
    ============================================================================= */
 
 (function () {

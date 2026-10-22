@@ -389,6 +389,32 @@ def build_table_records(
     return view[ui.TABLE_COLUMNS + [_ISO_DATE_KEY, _HASH_KEY]].to_dict("records")
 
 
+_DISPLAY_DATE_FORMAT = "%d/%m/%Y"
+
+
+def parse_display_date(raw: object) -> str:
+    """Read the Transaction Date field (DD/MM/YYYY) and return it as stored (ISO).
+
+    Strict on purpose: the field is free text now, so an impossible date such
+    as 31/02/2026 or a half-typed one such as 12/03/20 has to be refused here
+    rather than reach the CSV/database. The year is bounded to catch a
+    slipped digit (0026, 2062) that would otherwise be a valid but absurd date.
+    """
+    text = str(raw or "").strip()
+    try:
+        parsed = datetime.strptime(text, _DISPLAY_DATE_FORMAT)
+    except ValueError:
+        raise ValueError("Transaction Date must be a valid date as DD/MM/YYYY.") from None
+    if not 1900 <= parsed.year <= 2100:
+        raise ValueError("Transaction Date must be between the years 1900 and 2100.")
+    return parsed.strftime(DATE_FORMAT)
+
+
+def format_display_date(iso_date: str) -> str:
+    """The stored ISO date as shown in the Transaction Date field."""
+    return datetime.strptime(iso_date, DATE_FORMAT).strftime(_DISPLAY_DATE_FORMAT)
+
+
 def parse_amount(raw: object) -> float:
     """Read the amount field, which the client-side mask renders as text.
 
@@ -837,7 +863,7 @@ def _record_dropdown_options() -> tuple[list[dict], list[dict]]:
     Output("editing-hash", "data", allow_duplicate=True),
     Output("input-label", "value", allow_duplicate=True),
     Output("input-category", "value", allow_duplicate=True),
-    Output("input-date", "date", allow_duplicate=True),
+    Output("input-date", "value", allow_duplicate=True),
     Output("input-amount", "value", allow_duplicate=True),
     Output("input-installments", "value", allow_duplicate=True),
     Output("input-payment-method", "value", allow_duplicate=True),
@@ -875,7 +901,7 @@ def toggle_record_modal(_open, _close, is_open):
         None,
         "",
         None,
-        None,
+        "",
         "0.00",
         1,
         None,
@@ -894,7 +920,7 @@ def toggle_record_modal(_open, _close, is_open):
     Output("editing-hash", "data", allow_duplicate=True),
     Output("input-label", "value", allow_duplicate=True),
     Output("input-category", "value", allow_duplicate=True),
-    Output("input-date", "date", allow_duplicate=True),
+    Output("input-date", "value", allow_duplicate=True),
     Output("input-amount", "value", allow_duplicate=True),
     Output("input-installments", "value", allow_duplicate=True),
     Output("input-payment-method", "value", allow_duplicate=True),
@@ -951,7 +977,7 @@ def open_edit_modal(active_cell, rows):
         hash_value,
         purchase["label"],
         purchase["category"],
-        purchase["transaction_date"],
+        format_display_date(purchase["transaction_date"]),
         f"{purchase['amount']:.2f}",
         purchase["installments"],
         purchase["payment_method"],
@@ -979,7 +1005,7 @@ def open_edit_modal(active_cell, rows):
     Output("record-feedback", "children"),
     Output("input-label", "value"),
     Output("input-category", "value"),
-    Output("input-date", "date"),
+    Output("input-date", "value"),
     Output("input-amount", "value"),
     Output("input-installments", "value"),
     Output("input-ignore", "value"),
@@ -993,7 +1019,7 @@ def open_edit_modal(active_cell, rows):
     Input("btn-save", "n_clicks"),
     State("input-label", "value"),
     State("input-category", "value"),
-    State("input-date", "date"),
+    State("input-date", "value"),
     State("input-amount", "value"),
     State("input-installments", "value"),
     State("input-payment-method", "value"),
@@ -1059,6 +1085,11 @@ def save_record(
         )
 
     try:
+        iso_date = parse_display_date(date_value)
+    except ValueError as exc:
+        return no_update, alert(str(exc)), *[no_update] * 13
+
+    try:
         amount_value = parse_amount(amount)
     except ValueError:
         return no_update, alert("Amount must be a number."), *[no_update] * 13
@@ -1088,7 +1119,7 @@ def save_record(
         records = generate_installments(
             label=str(label).strip(),
             category=str(category),
-            date_str=str(date_value),
+            date_str=iso_date,
             total_amount=amount_value,
             installments=installment_count,
             payment_method_name=str(payment_method),
@@ -1126,7 +1157,7 @@ def save_record(
     # doesn't show a second, redundant copy of what the toast already says.
     was_editing = bool(editing_hash)
     return (
-        (trigger_value or 0) + 1, None, "", None, None, "0.00", 1, False,
+        (trigger_value or 0) + 1, None, "", None, "", "0.00", 1, False,
         None, "New Record", "Save", (not was_editing),
         True, toast_message, toast_header,
     )

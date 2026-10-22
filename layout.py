@@ -283,7 +283,23 @@ def _new_record_modal() -> dbc.Modal:
                             dbc.Col(
                                 [
                                     dbc.Label("Transaction Date"),
-                                    _date_picker("input-date", in_modal=True),
+                                    # Plain text, not a calendar picker: typing
+                                    # the date is faster for entering many
+                                    # records, and a text field never opens a
+                                    # popup. The slashes are inserted while
+                                    # typing by assets/input-masks.js; without
+                                    # that script a full "DD/MM/YYYY" can still
+                                    # be typed by hand. The server validates it
+                                    # either way (parse_display_date, app.py).
+                                    dbc.Input(
+                                        id="input-date",
+                                        type="text",
+                                        inputMode="numeric",
+                                        placeholder="DD/MM/YYYY",
+                                        maxLength=10,
+                                        value="",
+                                        autoComplete="off",
+                                    ),
                                 ],
                                 xs=12,
                                 md=6,
@@ -947,7 +963,7 @@ def build_layout() -> html.Div:
                                     for c in TABLE_COLUMNS
                                 ],
                                 data=[],
-                                page_size=30,
+                                page_size=20,
                                 style_table={
                                     "overflowX": "auto",
                                     "minWidth": "100%",

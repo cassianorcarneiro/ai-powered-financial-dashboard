@@ -1,6 +1,8 @@
 /* =============================================================================
    AI POWERED FINANCIAL DASHBOARD
-   dcc.DatePickerSingle restyling.
+   dcc.DatePickerSingle restyling, for the two date filters. The Transaction
+   Date field in the New Record dialog is a plain text input now (see
+   layout.py) and is styled by theme.css like every other form field.
 
    The component ships its own styling, which knows nothing about Bootstrap: the
    field renders shorter and narrower than the dbc.Input beside it. These rules
@@ -20,23 +22,18 @@
    ============================================================================= */
 
 /* ---- Outer wrapper: fill the column -------------------------------------- */
-#input-date,
 #date-start,
 #date-end {
   display: block !important;
   width: 100% !important;
 }
 
-#input-date .SingleDatePicker,
 #date-start .SingleDatePicker,
 #date-end .SingleDatePicker,
-#input-date .SingleDatePickerInput,
 #date-start .SingleDatePickerInput,
 #date-end .SingleDatePickerInput,
-#input-date .DateInput,
 #date-start .DateInput,
 #date-end .DateInput,
-#input-date .dash-datepicker,
 #date-start .dash-datepicker,
 #date-end .dash-datepicker {
   width: 100% !important;
@@ -47,10 +44,8 @@
 }
 
 /* ---- The field itself: match Bootstrap 5 .form-control ------------------- */
-#input-date .DateInput_input,
 #date-start .DateInput_input,
 #date-end .DateInput_input,
-#input-date .dash-datepicker-input-wrapper,
 #date-start .dash-datepicker-input-wrapper,
 #date-end .dash-datepicker-input-wrapper {
   box-sizing: border-box !important;
@@ -72,10 +67,8 @@
 }
 
 /* Bootstrap's focus ring, replacing react-dates' heavy bottom border. */
-#input-date .DateInput_input__focused,
 #date-start .DateInput_input__focused,
 #date-end .DateInput_input__focused,
-#input-date .dash-datepicker-input-wrapper:focus-within,
 #date-start .dash-datepicker-input-wrapper:focus-within,
 #date-end .dash-datepicker-input-wrapper:focus-within {
   border: 1px solid #37C3F7 !important;
@@ -84,10 +77,8 @@
   outline: 0 !important;
 }
 
-#input-date .DateInput_input::placeholder,
 #date-start .DateInput_input::placeholder,
 #date-end .DateInput_input::placeholder,
-#input-date .dash-datepicker-input::placeholder,
 #date-start .dash-datepicker-input::placeholder,
 #date-end .dash-datepicker-input::placeholder {
   color: #8A8A8A !important;
@@ -95,7 +86,6 @@
 }
 
 /* Dash 4 only: the inner <input> sits inside the styled wrapper. */
-#input-date .dash-datepicker-input,
 #date-start .dash-datepicker-input,
 #date-end .dash-datepicker-input {
   flex: 1 1 auto !important;
@@ -111,7 +101,6 @@
 }
 
 /* ---- Clear ("x") button --------------------------------------------------- */
-#input-date .SingleDatePickerInput_clearDate,
 #date-start .SingleDatePickerInput_clearDate,
 #date-end .SingleDatePickerInput_clearDate {
   top: 50% !important;
