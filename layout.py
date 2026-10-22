@@ -963,7 +963,7 @@ def build_layout() -> html.Div:
                                     for c in TABLE_COLUMNS
                                 ],
                                 data=[],
-                                page_size=20,
+                                page_size=40,
                                 style_table={
                                     "overflowX": "auto",
                                     "minWidth": "100%",
