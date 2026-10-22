@@ -28,6 +28,7 @@ from dateutil.relativedelta import relativedelta
 from flask import has_request_context, session
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import backup
 import charts
 import layout as ui
 import security
@@ -428,6 +429,7 @@ def selected_records(
 # -----------------------------------------------------------------------------
 
 bootstrap_data_files()
+backup.start_scheduler()
 
 app = Dash(
     __name__,

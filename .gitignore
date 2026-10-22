@@ -2,8 +2,20 @@
 .env
 
 # Financial data — never commit personal transaction history
+# The SQLite database, its write-ahead log and shared-memory companions,
+# and the snapshots taken by backup.py
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/backups/
+# Legacy CSVs: the originals, and the copies renamed after the SQLite import
 data/*.csv
+data/*.csv.migrated
 !data/*.example.csv
+# Output of `python storage.py export`
+data/export/
+# Manual safety copy taken before upgrading (cp -r data data.bak)
+data.bak/
 
 # Dashboard lock state — contains a salted password hash
 data/lock.json

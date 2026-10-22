@@ -36,8 +36,11 @@ examples/
 # dependency (Pillow) is not part of requirements.txt
 generate_icons.py
 
-# Financial data is bind-mounted, never baked into the image
+# Financial data is bind-mounted, never baked into the image. This covers the
+# database and the backups/ folder inside data/.
 data/
+# Manual safety copy taken before upgrading (cp -r data data.bak)
+data.bak/
 
 # Docker artifacts
 docker-compose*.yaml

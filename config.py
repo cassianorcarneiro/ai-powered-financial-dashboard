@@ -85,11 +85,33 @@ class Config:
     # Opens a local splash page in the browser; meaningless inside a container.
     open_browser: bool = _env_bool("OPEN_BROWSER", False)
 
-    # ----- Data file paths (relative to the project root / WORKDIR=/app) -----
+    # ----- Data paths (relative to the project root / WORKDIR=/app) -----
     data_dir: Path = BASE_DIR / os.getenv("DATA_DIR", "data")
+    # The live database. SQLite in WAL mode: one file plus -wal/-shm companions
+    # that SQLite manages itself, so the directory must be writable.
+    db_path: Path = data_dir / "dashboard.db"
+    # Legacy CSV files. Only read once, to import an existing history into the
+    # database on first start; nothing writes to them afterwards.
     csv_db: Path = data_dir / "data.csv"
     categories_db: Path = data_dir / "categories.csv"
     payment_methods_db: Path = data_dir / "payment_methods.csv"
+
+    # ----- Backups -----
+    # Set BACKUP_DIR to another disk or mount to survive losing the drive. The
+    # default keeps snapshots beside the database, which protects against
+    # mistakes and bugs but not against hardware failure.
+    backup_dir: Path = (
+        Path(os.environ["BACKUP_DIR"]) if os.getenv("BACKUP_DIR") else data_dir / "backups"
+    )
+    # One scheduled snapshot per this many hours: at start-up, then from a
+    # background thread.
+    backup_interval_hours: int = _env_int("BACKUP_INTERVAL_HOURS", 24)
+    backup_keep_scheduled: int = _env_int("BACKUP_KEEP_SCHEDULED", 14)
+    # A snapshot taken right before a delete or an edit, so a mistake made
+    # minutes after the last scheduled snapshot is still recoverable. Throttled
+    # so a burst of deletions yields one snapshot, not one per click.
+    backup_safety_min_minutes: int = _env_int("BACKUP_SAFETY_MIN_MINUTES", 60)
+    backup_keep_safety: int = _env_int("BACKUP_KEEP_SAFETY", 20)
 
     # ----- Authentication -----
     # Basic auth is only meaningful behind TLS or a trusted network (e.g. a VPN).

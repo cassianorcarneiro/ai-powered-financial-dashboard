@@ -34,9 +34,10 @@ EXPOSE 8050
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS http://localhost:8050/healthz >/dev/null || exit 1
 
-# Gunicorn rather than the Dash development server. A single worker keeps the
-# CSV read-modify-write cycle inside one process, where the in-process lock in
-# storage.py is sufficient; multiple workers would need external locking.
+# Gunicorn rather than the Dash development server. Writes are serialized by
+# SQLite's own write lock, which holds across processes, so more workers would
+# be safe for the data. One is kept anyway: it is plenty for one user, and the
+# background backup scheduler starts once per worker.
 CMD ["gunicorn", \
      "--bind", "0.0.0.0:8050", \
      "--workers", "1", \

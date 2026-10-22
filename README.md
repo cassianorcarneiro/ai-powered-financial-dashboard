@@ -2,7 +2,7 @@
 
 > Personal finance dashboard with local AI insights — your data never leaves your machine.
 
-A Python-based personal finance dashboard that turns CSV-stored transactions into interactive charts, financial indicators, and AI-driven written insights. Everything runs locally via Docker, with **no data sent to the cloud**.
+A Python-based personal finance dashboard that turns your transactions (stored in a local SQLite database) into interactive charts, financial indicators, and AI-driven written insights. Everything runs locally via Docker, with **no data sent to the cloud**.
 
 <p align="center">
   <img alt="Stack" src="https://img.shields.io/badge/Stack-Dash%20%2B%20Plotly%20%2B%20Ollama-blue?style=for-the-badge">
@@ -19,7 +19,8 @@ A Python-based personal finance dashboard that turns CSV-stored transactions int
 - 💳 **Payment method management** — handle credit cards (with statement close / payment days) and debit accounts
 - 📅 **Installment-aware** — splits multi-installment purchases into per-month records with automatic payment date computation
 - 🔒 **Privacy-first** — all data stays on your machine; the LLM runs locally
-- 💾 **Persistent data** — your CSVs live on the host filesystem, untouched by container restarts
+- 💾 **Persistent data** — one SQLite file on the host filesystem, untouched by container restarts
+- 🛟 **Automatic backups** — a daily snapshot plus one before every delete or edit, with a one-command restore
 - 🛟 **Graceful degradation** — when the model is unavailable or out of memory, a deterministic summary is shown instead of an error
 - 📱 **Usable on a phone** — charts stack to a single column, controls meet minimum touch-target sizes, and the app can be added to the home screen with its own icon
 - 🔐 **Optional privacy lock** — a password screen for the dashboard itself, independent of network-level auth; see [Privacy and security](#-privacy-and-security)
@@ -37,7 +38,7 @@ A Python-based personal finance dashboard that turns CSV-stored transactions int
              │
              ▼
        ┌───────────┐
-       │  ./data/  │   ← CSVs persisted on the host
+       │  ./data/  │   ← database and backups on the host
        └───────────┘
 ```
 
@@ -86,13 +87,16 @@ cd ai-powered-financial-dashboard
 │   ├── data.example.csv
 │   ├── categories.example.csv
 │   └── payment_methods.example.csv
-└── data/               # ← your real files go here; kept out of git
-    ├── data.csv
-    ├── categories.csv
-    └── payment_methods.csv
+└── data/               # ← created on first run; kept out of git
+    ├── dashboard.db    # the database (plus dashboard.db-wal / -shm while running)
+    └── backups/        # snapshots, see "Data persistence"
 ```
 
-The three CSV files inside `data/` are **created automatically on first run** if they are missing, with the correct headers. To start from the bundled samples instead:
+The database is **created automatically on first run**. Nothing needs to be prepared by hand.
+
+**Migrating from the CSV version.** If `data/` still holds `data.csv`, `categories.csv` and `payment_methods.csv`, they are imported on the first start. The import is checked (row count and total amount must match what was read) and runs in one transaction, so a failure leaves nothing half-imported and stops the start-up with a clear message. Afterwards the three files are renamed to `*.csv.migrated`. They are kept, not deleted, and they will not be re-imported.
+
+To start from the bundled samples instead, copy them into `data/` before the first start:
 
 ```bash
 cp examples/data.example.csv            data/data.csv
@@ -100,9 +104,7 @@ cp examples/categories.example.csv      data/categories.csv
 cp examples/payment_methods.example.csv data/payment_methods.csv
 ```
 
-Keeping the samples in `examples/` rather than inside `data/` is deliberate: `data/*.csv` is gitignored, and a stray `rm data/*.csv` while clearing your own records would otherwise take the samples down with it.
-
-Expected headers:
+The CSV headers the importer expects:
 
 | File | Required columns |
 |------|------------------|
@@ -192,7 +194,6 @@ All runtime configuration is done through environment variables, exposed via `.e
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `DASHBOARD_PORT` | `8050` | Host port mapped to the dashboard |
-| `DASHBOARD_BIND` | `0.0.0.0` | Host address the port is published on. Use `127.0.0.1` behind a local reverse proxy (e.g. Tailscale Serve) |
 | `OLLAMA_URL` | `http://ollama:11434` | Where the dashboard reaches Ollama |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Which LLM to use for insights |
 | `OLLAMA_TIMEOUT` | `120` | Seconds to wait for a completion |
@@ -226,13 +227,50 @@ With the bundled profile the `model-puller` service fetches the new model automa
 
 | What | Where | Persisted? |
 |------|-------|------------|
-| Your CSVs | `./data/` (bind mount) | ✅ on the host filesystem |
+| Database | `./data/dashboard.db` (bind mount) | ✅ on the host filesystem |
+| Backups | `./data/backups/` (or `BACKUP_DIR`) | ✅ on the host filesystem |
 | Ollama models | `ollama` named volume (bundled profile) | ✅ across restarts |
 | Container filesystem | inside the container | ❌ rebuilt each time |
 
-Edit your CSVs directly with any tool (Excel, VS Code, `pandas`) — the dashboard re-reads them on every interaction. Writes from the app are atomic, so an interrupted save cannot leave a half-written file behind.
+Every change is one SQLite transaction, so an interrupted save leaves the previous state, never a partial one. Writes are serialized by SQLite's own lock, so overlapping requests cannot overwrite each other.
 
-`data/*.csv` is listed in `.gitignore`: your transaction history is never committed. The reference samples live in `examples/` instead, outside `data/`, so clearing your own files never touches them.
+`data/` is listed in `.gitignore`: your transaction history is never committed. The reference samples live in `examples/` instead, outside `data/`.
+
+> **Do not put `data/` on a network share (NFS, SMB).** SQLite's WAL mode needs a local filesystem.
+
+### Backups
+
+Two kinds of snapshot are taken, each pruned on its own so one cannot push the other out:
+
+| Kind | When | Kept |
+|------|------|------|
+| `scheduled` | at start-up and then every `BACKUP_INTERVAL_HOURS` (24) | newest `BACKUP_KEEP_SCHEDULED` (14) |
+| `safety` | right before a delete or an edit, at most once per `BACKUP_SAFETY_MIN_MINUTES` (60) | newest `BACKUP_KEEP_SAFETY` (20) |
+
+The safety snapshot covers the case a daily one cannot: a mistake made hours after the last scheduled snapshot. A snapshot uses SQLite's online backup API, so it is consistent while the app is running, and it is checked before it is kept. A backup failure is logged as an error but never blocks your own save or delete.
+
+By default snapshots sit next to the database. That protects against mistakes and bugs, **not against losing the disk**. Set `BACKUP_DIR` to a path on another drive and mount it in `docker-compose.yaml` to cover that too.
+
+**Restoring.** Stop the app first, then:
+
+```bash
+docker compose stop dashboard
+docker compose run --rm dashboard python backup.py list
+docker compose run --rm dashboard python backup.py restore dashboard-scheduled-YYYYMMDD-HHMMSS.db
+docker compose start dashboard
+```
+
+The current database is snapshotted before it is replaced, so restoring the wrong file can itself be undone.
+
+### Reading your data outside the app
+
+The database is the source of truth, so editing exported CSVs does not change it. To get the data out for Excel or `pandas`:
+
+```bash
+docker compose run --rm dashboard python storage.py export /app/data/export
+```
+
+or open `data/dashboard.db` with any SQLite client (read-only is safest while the app runs).
 
 To **completely reset** (including downloaded models):
 
@@ -326,15 +364,17 @@ DASHBOARD_PORT=8080
 
 Then `docker compose up -d` and visit http://localhost:8080.
 
-If the error mentions `address already in use` and a reverse proxy such as Tailscale Serve already listens on that port on the same machine, publish the port on loopback only. Set `DASHBOARD_BIND=127.0.0.1` in `.env`, then run `docker compose up -d`.
-
 **🔴 Empty charts / "No data in the selected period"**
 
 The default filter is the current calendar year. Adjust the date inputs, or reset them with the ↺ button.
 
 **🔴 The app reports a missing column**
 
-An existing CSV does not match the expected header. Compare it against the table in [Prepare your data folder](#2-prepare-your-data-folder); the error message names the missing columns.
+A legacy CSV being imported does not match the expected header. Compare it against the table in [Prepare your data folder](#2-prepare-your-data-folder); the error message names the missing columns. Nothing is imported until it is fixed.
+
+**🔴 "The database failed its integrity check"**
+
+Restore the newest snapshot, see [Backups](#backups).
 
 ---
 
@@ -364,8 +404,9 @@ for this step; it is not a dependency of the running app.
 ```
 .
 ├── app.py                  # Dash app, callbacks, record generation, entry point
-├── config.py               # Environment-driven settings, theme, CSV schemas
-├── storage.py              # Atomic CSV reads/writes, bootstrap, validation
+├── config.py               # Environment-driven settings, theme, column schemas
+├── storage.py              # SQLite persistence, one-time CSV import, CSV export
+├── backup.py               # Snapshots, retention, restore (also a small CLI)
 ├── metrics.py              # Trailing 12-month aggregations
 ├── insights.py             # Ollama client, prompt, fallback summary
 ├── security.py             # Privacy lock: password hashing, on/off state
@@ -386,14 +427,13 @@ for this step; it is not a dependency of the running app.
 ├── .dockerignore           # Keeps data, secrets and VCS out of the build context
 ├── .env.example            # Template for runtime configuration
 ├── .gitignore              # Keeps financial data and .env out of version control
-├── examples/               # Reference CSVs — copy into data/ to try the app
+├── examples/               # Sample CSVs — copy into data/ before the first start to try the app
 │   ├── data.example.csv
 │   ├── categories.example.csv
 │   └── payment_methods.example.csv
-└── data/                   # ← your CSVs live here (bind-mounted into the container)
-    ├── data.csv
-    ├── categories.csv
-    └── payment_methods.csv
+└── data/                   # ← the database and backups live here (bind-mounted)
+    ├── dashboard.db
+    └── backups/
 ```
 
 ---
@@ -402,7 +442,7 @@ for this step; it is not a dependency of the running app.
 
 This project is designed to keep your financial data on your machine:
 
-- ✅ CSVs never leave the host filesystem and are excluded from version control
+- ✅ The database and its backups never leave the host filesystem and are excluded from version control
 - ✅ The LLM runs locally — no API calls to any hosted provider
 - ✅ Only aggregated metrics are sent to the model, never individual transactions
 - ✅ The container runs as an unprivileged user
