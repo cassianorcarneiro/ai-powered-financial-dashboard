@@ -22,7 +22,10 @@ services:
     image: financial-dashboard:latest
     container_name: financial-dashboard
     ports:
-      - "${DASHBOARD_PORT:-8050}:8050"
+      # DASHBOARD_BIND=127.0.0.1 keeps the port off the network when Tailscale
+      # Serve fronts the dashboard on the same port number: Serve listens on
+      # the tailnet address, and a 0.0.0.0 bind here would collide with it.
+      - "${DASHBOARD_BIND:-0.0.0.0}:${DASHBOARD_PORT:-8050}:8050"
     environment:
       OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
