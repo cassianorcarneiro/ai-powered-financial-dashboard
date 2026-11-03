@@ -5,9 +5,10 @@
 
 """Personal finance dashboard built with Dash, Plotly and a local Ollama model.
 
-Transactions live in a CSV file on the host. The app renders aggregated charts,
-lets the user manage payment methods and insert installment-aware records, and
-generates a written commentary over the trailing twelve months.
+Transactions live in a SQLite database on the host (see storage.py). The app
+renders aggregated charts, lets the user manage payment methods and insert
+installment-aware records, and generates a written commentary over the
+trailing twelve months.
 """
 
 from __future__ import annotations
@@ -471,9 +472,11 @@ app = Dash(
     # unconditionally at import time, so Dash's default validation checks all
     # of them against whichever layout happens to be current and warns about
     # the other set. This is the standard, Dash-documented setting for an app
-    # with more than one top-level layout; it does mean a genuine typo'd
-    # component id elsewhere would no longer be caught by that validation, so
-    # id wiring is instead checked directly in this project's test suite.
+    # with more than one top-level layout. The trade-off: a genuine typo'd
+    # component id elsewhere is no longer caught by that validation, and
+    # nothing else checks id wiring yet (there is no test suite; see the
+    # README roadmap), so such a typo only shows up as a callback that
+    # silently does nothing.
     suppress_callback_exceptions=True,
 )
 def serve_layout() -> html.Div:
@@ -507,22 +510,28 @@ server = app.server  # WSGI entry point used by gunicorn
 # were ever read off the container.
 server.secret_key = secrets.token_hex(32)
 
-# Dash's default template already inserts assets/favicon.ico via {%favicon%},
-# so the browser tab icon needs no extra markup. These three tags cover what
-# that placeholder does not: the manifest is what lets Chrome on Android draw
-# a real icon (rather than a cropped screenshot) when the page is added to the
-# home screen; apple-touch-icon is Safari/iOS's separate equivalent; and
-# theme-color tints the browser chrome so the shortcut feels like an app
-# rather than a bookmark.
+# Icon tags. All files come from generate_icons.py.
+#
+# The two favicon links replace Dash's {%favicon%} placeholder, which emits the
+# .ico link without a `sizes` attribute. Without it, Chrome prefers the .ico
+# over the SVG; `sizes="32x32"` on the .ico, followed by the SVG, is the
+# documented fix. The SVG then stays sharp at any pixel density.
+#
+# The manifest is what Android reads when the page is added to the home
+# screen; it declares separate "any" and "maskable" icons (see
+# generate_icons.py for why). apple-touch-icon is iOS's separate equivalent,
+# since iOS ignores the manifest icons. theme-color tints the browser chrome so
+# the shortcut feels like an app rather than a bookmark.
 app.index_string = """<!DOCTYPE html>
 <html>
     <head>
         {%metas%}
         <title>{%title%}</title>
-        {%favicon%}
+        <link rel="icon" href="/assets/favicon.ico" sizes="32x32">
+        <link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
         {%css%}
         <link rel="manifest" href="/assets/manifest.json">
-        <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+        <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
         <meta name="theme-color" content="#0B0F14">
     </head>
     <body>

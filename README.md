@@ -382,20 +382,30 @@ Restore the newest snapshot, see [Backups](#backups).
 
 ## 🎨 App icon
 
-The browser tab icon and the icon used when the dashboard is added to a phone's
-home screen are generated from the same palette as the charts (`config.py`),
-rather than using the framework's default icon.
+The browser tab icon and the home-screen icon are generated from the same
+palette as the charts (`config.py`), rather than using the framework's default
+icon.
 
-To change the design, edit `generate_icons.py` and re-run it:
+| File | Used by |
+|------|---------|
+| `icon.svg`, `favicon.ico` | Browser tab (SVG where supported, `.ico` as fallback) |
+| `icon-192.png`, `icon-512.png` | Installed app on desktop, and anywhere no mask is applied |
+| `icon-maskable-192.png`, `icon-maskable-512.png` | Android home screen; the launcher crops these to its own shape |
+| `apple-touch-icon.png` | iOS home screen (iOS ignores the manifest icons) |
+
+The maskable files keep the bars inside the central safe zone, so no launcher
+shape cuts into them. To change the design, edit `generate_icons.py` and re-run
+it from the project root:
 
 ```bash
 pip install pillow
 python generate_icons.py
 ```
 
-This overwrites `assets/favicon.ico`, `assets/icon-192.png`,
-`assets/icon-512.png` and `assets/apple-touch-icon.png`. Pillow is only needed
-for this step; it is not a dependency of the running app.
+This overwrites every file in the table above. Pillow is only needed for this
+step; it is not a dependency of the running app. After a change, an Android
+phone keeps the old icon until the app is removed from the home screen and
+added again.
 
 ---
 
@@ -413,11 +423,17 @@ for this step; it is not a dependency of the running app.
 ├── charts.py               # Plotly figure factory
 ├── layout.py               # Dash component tree
 ├── assets/                 # Served automatically by Dash
+│   ├── theme.css           # Dark theme for Bootstrap controls Python can't style
 │   ├── mobile.css          # Responsive tweaks, dismissible-alert fix
 │   ├── datepicker.css      # Aligns the date field with Bootstrap form controls
-│   ├── favicon.ico         # Browser tab icon
-│   ├── icon-192.png        # Android/PWA home-screen icon
-│   ├── icon-512.png        # Android/PWA home-screen icon (high-res)
+│   ├── input-masks.js      # Date and amount input masks in the record dialog
+│   ├── chart-resize.js     # Keeps chart width/height correct on resize
+│   ├── icon.svg            # Browser tab icon (vector)
+│   ├── favicon.ico         # Browser tab icon (fallback)
+│   ├── icon-192.png        # Installed-app icon, unmasked
+│   ├── icon-512.png        # Installed-app icon, unmasked (high-res)
+│   ├── icon-maskable-192.png # Android home-screen icon
+│   ├── icon-maskable-512.png # Android home-screen icon (high-res)
 │   ├── apple-touch-icon.png # iOS home-screen icon
 │   └── manifest.json       # Lets "Add to Home Screen" use the icons above
 ├── generate_icons.py       # Regenerates the icon set from config.py's palette
